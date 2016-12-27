@@ -287,8 +287,8 @@ if __name__ == '__main__':
                         data_c = cc_martix(mini_data_s, mini_data_t)
 
                          # data_c = prepare_batch(batch, 'target_c', data_t.shape[1])
-                        loss += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
-                        #loss += [agent.train_guard(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
+                        # loss += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
+                        loss += [agent.train_guard(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
                         loss_batch += [loss[-1]]
                     else:
                         loss += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t))]

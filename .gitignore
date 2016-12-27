@@ -1,9 +1,8 @@
 # added by memray
-Experiment/
-dataset/
-keyphrase/Logs/
-stanford-postagger/
-.idea/
+/Experiment/
+/dataset/
+/stanford-postagger/
+/.idea/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
