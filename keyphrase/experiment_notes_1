@@ -1,0 +1,172 @@
+Basic Model Specs
+    bidirectional GRU
+    attention
+    no copy
+    encdec: total number of the parameters of the model: 38,520,000
+    config['enc_embedd_dim']  = 100
+    config['enc_hidden_dim']  = 150
+
+Data Preprocess
+    sentence boundary detection, seperate with <eos>
+    replace digits with <digit>
+    omit all the other punctuations
+
+Acm+Inspec
+    voc_size: 89976
+    after filter numbers: 88561
+    after replace number to <digit>: 88348
+    one2one
+        acm_pair_size: 671732
+        inspec_pair_size: 19276
+
+    voc_size=20000, batch_size=20, roughly converge after one 1 epoch (33586 batches) using 10h
+    consume >30% ram
+
+
+All+Inspec
+    one2one
+        First attampt
+            Train pairs: 3059983
+            Test pairs:  19276
+            Dict size:   324163
+
+            consume ram [peak]>85% [normal]>82%
+               801/152999 - ETA: 117617s - loss_reg: 18.4517 - ppl.: 904.1257802
+            voc_size=50000, batch_size=20, ETA: 117617s=32.67h
+
+            die after 30k batches
+            Error allocating 3057600000 bytes of device memory (out of memory). Driver report 2159820800 bytes free and 6441730048 bytes total
+
+        Second attampt
+            load data in the fashion of one2multiple, parse into multiple pairs only when training or testing
+            in this way we can avoid keeping large data in memory (too many duplicate inputs)
+            store processed data in file, or it takes too long time on preprocessing
+
+            Train pairs: 578015
+            Test pairs:  2000
+            Dict size:   324163
+            Finish processing and dumping: 757 seconds
+            Load successful: vocsize=324163
+
+            - experiments.copynet-keyphrase-all.one2one.nocopy.id=20161128-200145.log
+                Modify the input part, loading data in multiple-output format, transform into single-output at each batch
+            - experiments.copynet-keyphrase-all.one2one.nocopy.id=20161128-205813.log
+                Modify the beam-search, add a dict to avoid duplicate prediction
+            - experiments.copynet-keyphrase-all.one2one.nocopy.id=20161128-225250.log
+                Correct a critical bug, the end condition of predicting should be new_hyp_samples[idx][-1] == 0) instead of new_hyp_states[idx][-1] == 0
+            - experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-013338.log
+                Add evaluation on inspec
+                    Overall P	Overall R	Overall F1
+                    0.06265	0.0810687	0.066495
+            - type=generative, include non-appear, length=8, beam=30
+                Overall - Precision@5=0.124300, Recall@5=0.080843, F1-score@5=0.092378
+            - type=generative, include non-appear, length=8, beam=15
+                Overall - Precision@5=0.124300, Recall@5=0.080926, F1-score@5=0.092445
+            - type=generative, exclude non-appear, length=8, beam=30, number_to_predict=5
+                Overall - Precision@5=0.114100, Recall@5=0.073216, F1-score@5=0.084263
+            - type=generative, exclude non-appear, length=8, beam=30, number_to_predict=10
+                Overall - Precision@10=0.078850, Recall@10=0.099047, F1-score@10=0.082961
+
+            - (1st tab) experiments.copynet-keyphrase-all.one2one.nocopy.id=20161203-162459.testing@10.generate.len=8.beam=50.log
+                type=generative, exclude non-appear, length=8, beam=50, number_to_predict=10
+                Overall - Precision@10=0.078850, Recall@10=0.099057, F1-score@10=0.082966
+
+            - type=extractive, exclude non-appear, length=8, number_to_predict=5
+                Overall - Precision@5=0.183400, Recall@5=0.121984, F1-score@5=0.137663
+            - (2nd tab) experiments.copynet-keyphrase-all.one2one.nocopy.id=20161203-173848.testing@10.extract.len=8.beam=50.log
+                type=extractive, exclude non-appear, length=8, number_to_predict=10
+                Overall - Precision@10=0.141200, Recall@10=0.179475, F1-score@10=0.148734
+
+            with filtering len(predict)>1
+            - (4th tab) experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-032738.testing@10.extract.len=8.beam=50.len(predict)>1.log
+                type=extractive, exclude non-appear, length=8, number_to_predict=10
+                Overall - extract Precision@10=0.228100, Recall@10=0.272683, F1-score10=0.234032
+
+            with start/end with stopwords
+            - (3rd tab) experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-035046.testing@10.extract.len=8.beam=50.log
+                type=extractive, exclude non-appear, length=8, number_to_predict=10
+                Overall - extract Precision@10=0.138950, Recall@10=0.177242, F1-score10=0.146469
+
+            with filtering len(predict)>1 & start/end with stopwords
+            - (5th tab) experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-033701.testing@5.extract.len=8.beam=50.log
+                type=extractive, exclude non-appear, length=8, number_to_predict=5
+                Overall - extract Precision@5=0.304500, Recall@5=0.190865, F1-score5=0.221157
+            - experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-032629.testing@10.extract.len=8.beam=50.len(predict)>1&stop.log
+                type=extractive, exclude non-appear, length=8, number_to_predict=10
+                Overall - extract Precision@10=0.241300, Recall@10=0.285881, F1-score10=0.247016
+
+            after removing non-appear targets (not correct)
+            - experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-040734.testing@10.extract.len=8.beam=50.log
+                type=extractive, exclude non-appear, length=8, number_to_predict=10
+                Overall - extract Precision@10=0.241300, Recall@10=0.285881, F1-score10=0.247016
+            - experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-042413.testing@10.extract.len=8.beam=50.log
+                config['keep_nonappear']    = True
+                Overall - extract Precision@10=0.241300, Recall@10=0.285881, F1-score10=0.247016
+
+            - experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-204749.testing@10.extract.len=8.beam=50.log
+              and
+              experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-205846.testing@10.extract.len=8.beam=50.log
+                after fix the bug of filtering non-appear targets
+                Overall - Precision@10=0.241300, Recall@10=0.364329, F1-score10=0.271546
+
+            - filter non-appear targets only, keep all extractive predicts
+                experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-212812.testing@10.extract.len=8.beam=50.log
+                Overall - Precision@10=0.241300, Recall@10=0.364329, F1-score10=0.271546
+
+            - filter non-appear targets/predicts (as we've filter during generating results, so filter predicts doesn't work)
+                experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-220801.testing@10.extract.len=8.beam=50.log
+                Overall - Precision@10=0.241300, Recall@10=0.364329, F1-score10=0.271546
+
+            - Normalize scores by considering phrase length (very slight change)
+                experiments.copynet-keyphrase-all.one2one.nocopy.id=20161204-220813.testing@10.extract.len=8.beam=50.log
+                Precision@10=0.241400, Recall@10=0.364108, F1-score10=0.271553
+
+            - Non-appear prediction. Valid testing data=1471
+                Precision@10=0.011081, Recall@10=0.041728, F1-score10=0.016606
+
+            - IIR 19 sections
+                Precision@10=0.189474, Recall@10=0.187389, F1-score10=0.178661
+            - IIR 19 sections (filter out keyphrase whose length=1)
+                Precision@10=0.268421, Recall@10=0.274905, F1-score10=0.257675
+
+            - TPR P@5=0.354, R@5=0.183, F1@5=0.242
+            - Micro and Macro@5
+                experiments.copynet-keyphrase-all.one2one.nocopy.id=20161209-021655.testing@5.extractive.len=8.beam=50.log
+                extractive valid testing data=2000, Number of Target=15206/19276, Number of Prediction=10000, Number of Correct=3045
+                Precision@5=0.304500, Recall@5=0.245656, F1-score5=0.252075
+                Macro-Precision@5=0.304500, Macro-Recall@5=0.200250, Macro-F1-score5=0.241609
+
+            - Micro and Macro@10
+                experiments.copynet-keyphrase-all.one2one.nocopy.id=20161209-015940.testing@10.extractive.len=8.beam=50.log
+                extractive valid testing data=2000, Number of Target=15206/19276, Number of Prediction=20000, Number of Correct=4826
+                Precision@10=0.241300, Recall@10=0.364329, F1-score10=0.271546
+                Macro-Precision@10=0.241300, Macro-Recall@10=0.317375, Macro-F1-score10=0.274158
+
+
+Inspec+Inspec
+    Train pairs: 2000
+    Test pairs:  2000
+    Dict size:   15263
+    Finish processing and dumping: 3 seconds
+    Load successful: vocsize=15263
+    1: 2456, 12.741
+    2: 8909, 46.218
+    3: 5281, 27.397
+    4: 1807, 9.374
+    5: 556, 2.884
+    6: 167, 0.866
+    7: 74, 0.384
+    8: 15, 0.078
+    9: 7, 0.036
+    10: 3, 0.016
+    12: 1, 0.005
+    Total phrases: 19276
+
+    encdec: total number of the parameters of the model: 1918423
+
+
+1	944840	30.877
+2	1320695	43.16
+3	567462	18.545
+4	160002	5.229
+5	44348	1.449

@@ -1,0 +1,15 @@
+1. difference between covc_encdec and encdec?
+from emolga.models.covc_encdec import NRM
+from emolga.models.encdec import NRM as NRM0
+if config['copynet']:
+    agent  = NRM(config, n_rng, rng, mode=config['mode'],
+                 use_attention=True, copynet=config['copynet'], identity=config['identity'])
+else:
+    agent  = NRM0(config, n_rng, rng, mode=config['mode'],
+                  use_attention=True, copynet=config['copynet'], identity=config['identity'])
+
+I think NRM0 doesn't support copy_net, as only NRM supports [agent.train_(data_s, data_t, data_c)]
+
+2. what's the purpose of bAbI?
+3. how to run vannila seq2seq, bidirectional, attention-based, copy-net respectively?
+4. [solved]where to control low-freq words (replace them with unk)? in preprocess?

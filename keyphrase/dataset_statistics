@@ -1,0 +1,13 @@
+
+INSPEC
+    #(data)                 = 2000
+    #(keyphrase)            = 19,276
+    #(keyphrase appeared)   = 15206
+
+    In Clustering to Find Exemplar Terms for Keyphrase Extraction, Zhiyuan Liu, Peng Li, Yabin Zheng, Maosong Sun, EMNLP 2009
+        #(data)                 = 2000
+        #(keyphrase)            = 29,517 keyphrases
+        #(keyphrase appeared)   = 14785.604900459
+        P=0.327, R=0.653, F1=0.436
+        #(extract)              = 29,517
+        #(correct)              = 9,655

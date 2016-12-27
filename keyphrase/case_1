@@ -1,0 +1,76 @@
+[SOURCE]: newton s iteration and the sparse hensel algorithm extended abstract <eos> this paper presents an organization of the p adic lifting or hensel algorithm that differs from the organization previously presented by zassenhaus zas69 and currently used in algebraic manipulation circles mos73 yun74 wan75 mus75 <eos> our organization is somewhat more general than the earlier one and admits the improvements that yielded the sparse modular algorithm zip79 more easily than the zassenhaus algorithm <eos> from a pedagogical point of view the relationship between newton s iteration and the p adic algorithms is clearer in our formulation than with the zassenhaus algorithm
+
+[TARGET]: point; modular; organization; general; relationships; manipulation; paper; algorithm; abstraction; iter; 
+[DECODE]: 15 predictions
+		[2.385]algorithm
+		[3.155]algorithms
+		[3.509]structure
+		[3.720]method
+		[3.800]recursion
+		[3.891]<unk>
+		[4.028]implementation
+		[4.137]computation
+		[4.318]general
+		[4.778]systems
+		[4.828]practical
+		[4.839]point
+		[5.408]newton iteration
+		[5.771]newton s algorithm
+		[6.089]newton krylov
+
+[TARGET]: outerplanar graph; striagh line drawing; slope number; 
+[DECODE]: 15 predictions
+		[1.630]graph drawing
+		[3.287]graphs
+		[3.654]line graph drawing
+		[3.946]line drawing
+		[4.390]<digit>
+		[4.436]line graphs
+		[4.699]line graph
+		[4.883]cycle graph
+		[5.018]drawing
+		[5.265]graph
+		[5.455]drawing graph
+		[5.464]directed graph drawing
+		[5.556]edge drawing
+		[5.762]<digit> graph
+		[5.825]edge graph
+[SOURCE]: midlife career choices how are they different from other career choices <eos> it was <digit> when candy start began working in libraries <eos> libraries seemed to be a refuge from change a dependable environment devoted primarily to preservation <eos> she was mistaken <eos> technological changes in every decade of her experience have affected how and where she used her mls <eos> far from a static refuge libraries have proven to be spaceships loaded with precious cargo hurtling into the unknown <eos> the historian in the author says that perhaps libraries have always been like this <eos> this paper looks at a midlife decision point and the choice that this librarian made to move from a point of lessening productivity and interest to one of increasing challenge and contribution <eos> it is a personal narrative of midlife experience from one librarian s point of view <eos> since writing this article candy s career has followed more changes <eos> after selling the wings tm system she has taken her experiences and vision to another library vendor gaylord information systems where she serves as a senior product strategist
+11/28/2016 23:01:59 [INFO] encdec: 
+11/28/2016 23:01:59 [INFO] encdec: [TARGET]: midlife career choices; libraries; technological changes; productivity; 
+11/28/2016 23:01:59 [INFO] encdec: [DECODE]: 15 predictions
+		[4.296]libraries
+		[4.323]evaluation
+		[4.364]paper
+		[4.928]standardization
+		[4.932]<unk>
+		[4.934]research
+		[5.211]implementation
+		[5.239]academic libraries
+		[5.268]empirical evaluation
+		[5.278]experience
+		[5.346]women
+		[5.417]empirical study
+		[5.519]design
+		[5.520]case study
+		[5.706]empirical research
+**************************************************
+[SOURCE]: on the accuracy of polynomial interpolation in hilbert space with disturbed nodal values of the operator <eos> the interpolation accuracy of polynomial operators in a hilbert space with a measure is estimated when nodal values of these operators are given approximately
+
+[TARGET]: polynomial interpolation; hilbert space; disturbed nodal values; polynomial operators; 
+[DECODE]: 15 predictions
+		[0.608]hilbert space
+		[4.290]space
+		[4.470]interpolation
+		[5.004]projection operators
+		[5.163]hilbert spaces
+		[5.166]projection operator
+		[5.326]accuracy
+		[5.367]polynomial
+		[5.399]polynomial interpolation
+		[5.456]hilbert space operators
+		[5.498]hilbert space interpolation
+		[5.764]polynomial operator
+		[5.807]space operators
+		[5.812]hilbert space operator
+		[5.851]polynomial operators

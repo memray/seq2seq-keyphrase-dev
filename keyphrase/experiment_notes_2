@@ -1,0 +1,45 @@
+Basic Model Specs
+    bidirectional GRU
+    attention
+    no copy
+    encdec: total number of the parameters of the model: 70,389,000
+    config['enc_embedd_dim']  = 150
+    config['enc_hidden_dim']  = 300
+
+Data Preprocess
+1. keep all the digits, sentence boundary detector
+    sentence boundary detection, seperate with <eos>
+    keep all the main punctuations
+        text = re.sub('[_<>,()\.\']', ' \g<0> ', text) # pad space arround these symbols
+        text = filter(lambda w: len(w) > 0, re.split('[^a-zA-Z0-9_<>,()\.\']', text)) # tokenize by non-letters
+    All+Inspec - one2one
+        Train pairs: 578015
+        Test pairs:  2000
+        Dict size:   330694
+            full-digit words(^\d+\t) = 9,516, and 1,274 in first 50k words.
+        Finish processing and dumping: 713 seconds
+2. replace digits with <digit> and %, didn't parse keyphrase, sentence boundary detector
+    All+Inspec - one2one
+        Train pairs: 578015
+        Test pairs:  2000
+        Dict size:   342227
+        Finish processing and dumping: 1209 seconds
+3. keep most punctuations, replace digits with <digit>, sentence boundary detector
+    Train pairs: 578015
+    Test pairs:  2000
+    Dict size:   320393
+    looks good
+
+Experiment
+1. Not fully trained. Encounter NaN problem, need to add clipping
+    extractive valid testing data=2000, Number of Target=15130/19276, Number of Prediction=20000, Number of Correct=4170
+    Precision@10=0.208500, Recall@10=0.312865, F1-score10=0.234194
+    Macro-Precision@10=0.208500, Macro-Recall@10=0.275611, Macro-F1-score10=0.237404
+
+    Parameter
+        total = 70389000
+        count < 1/5/10 = 15233415 / 1468437 / 287763
+        max = 18.585939
+
+2. Copy net, clip_norm=2
+    number of parameters: 78,835,750

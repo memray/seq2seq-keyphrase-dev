@@ -1,0 +1,83 @@
+Training data 1
+[SOURCE]: geodma geographic data mining analyst <eos> remote sensing images obtained by remote sensing are a key source of data for studying large scale geographic areas <eos> from <digit> onwards a new generation of land remote sensing satellites from usa china brazil india and europe will produce in <digit> year as much data as <digit> years of the landsat <digit> satellite <eos> thus the research community needs new ways to analyze large data sets of remote sensing imagery <eos> to address this need this paper describes a toolbox for combing land remote sensing image analysis with data mining techniques <eos> data mining methods are being extensively used for statistical analysis but up to now have had limited use in remote sensing image interpretation due to the lack of appropriate tools <eos> the toolbox described in this paper is the geographic data mining analyst geodma <eos> it has algorithms for segmentation feature extraction feature selection classification landscape metrics and multi temporal methods for change detection and analysis <eos> geodma uses decision tree strategies adapted for spatial data mining <eos> it connects remotely sensed imagery with other geographic data types using access to local or remote database <eos> geodma has methods to assess the accuracy of simulation models as well as tools for spatio temporal analysis including a visualization of time series that helps users to find patterns in cyclic events <eos> the software includes a new approach for analyzing spatio temporal data based on polar coordinates transformation <eos> this method creates a set of descriptive features that improves the classification accuracy of multi temporal image databases <eos> geodma is tightly integrated with terraview gis so its users have access to all traditional gis features <eos> to demonstrate geodma we show two case studies on land use and land cover change <eos> c <digit> elsevier ltd all rights reserved
+[TARGET]: obia; image processing; data mining; image segmentation; multitemporal analysis; landscape ecology;
+[DECODE]: 15 predictions
+		[2.649]data mining
+		[2.865]remote sensing
+		[3.290]<unk>
+		[3.437]spatial data mining
+		[3.734]classification
+		[4.443]gis
+		[4.699]land use
+		[4.871]visualization
+		[5.118]big data
+		[5.230]geographic information systems
+		[5.246]geographic information
+		[5.465]spatial data
+		[5.672]data mining methods
+		[5.691]database
+		[5.785]data mining techniques
+
+
+Training data 2
+[SOURCE]: javadaptor flexible runtime updates of java applications <eos> software is changed frequently during its life cycle <eos> new requirements come and bugs must be fixed <eos> to update an application it usually must be stopped patched and restarted <eos> this causes time periods of unavailability which is always a problem for highly available applications <eos> even for the development of complex applications restarts to test new program parts can be time consuming and annoying <eos> thus we aim at dynamic software updates to update programs at runtime <eos> there is a large body of research on dynamic software updates but so far existing approaches have shortcomings either in terms of flexibility or performance <eos> in addition some of them depend on specific runtime environments and dictate the program s architecture <eos> we present javadaptor the first runtime update approach based on java that a offers flexible dynamic software updates b is platform independent c introduces only minimal performance overhead and d does not dictate the program architecture <eos> javadaptor combines schema changing class replacements by class renaming and caller updates with java hotswap using containers and proxies <eos> it runs on top of all major standard java virtual machines <eos> we evaluate our approach s applicability and performance in non trivial case studies and compare it with existing dynamic software update approaches <eos> copyright <digit> john wiley sons ltd
+
+[TARGET]: dynamic software updates; program evolution; state migration tool support;
+[DECODE]: 15 predictions
+		[2.028]java
+		[3.202]languages
+		[3.677]dynamic
+		[3.720]garbage collection
+		[3.914]performance
+		[3.961]dynamic programming
+		[4.708]<unk>
+		[4.755]algorithms
+		[4.797]design
+		[5.056]runtime
+		[5.405]java virtual machine
+		[5.521]aspect oriented programming
+		[5.621]dynamic software
+		[5.888]dynamic program
+		[6.242]dynamic code generation
+
+Testing data 1
+[SOURCE]: vsat technology aids growth <eos> choosing to migrate to ip based applications also means deciding whether terrestrial technologies such as frame relay dsl or plain old telephone service pots can provide the scalability flexibility and high bandwidth required to support those applications and whether these technologies can do so affordably <eos> each option has its tradeoffs <eos> also in each case retailers with nationwide chains have to deal with multiple last mile service providers for service installation and network maintenance <eos> because of this many retailers are selecting two way satellite networking technology frequently referred to as vsat as the technology of choice for always on nationwide high speed connectivity coupled with end to end network ownership and favorable economics <eos> enterprises are adopting vsat platforms not only for emerging ip and web based applications but also for mission critical front office functions such as credit authorization and point of sale polling
+
+[TARGET]: vsat; retailers; ip based applications;
+[DECODE]: 15 predictions
+		[3.344]internet
+		[4.056]network
+		[4.303]<unk>
+		[4.327]paper
+		[4.544]infrastructure
+		[4.699]broadband
+		[4.804]service
+		[4.952]management
+		[5.050]design
+		[5.092]access
+		[5.107]performance
+		[5.223]network management
+		[5.304]ip
+		[5.564]quality of service
+		[5.921]internet of things
+
+Testing Data 2
+[SOURCE]: using latent semantic analysis to assess reader strategies <eos> we tested a computer based procedure for assessing reader strategies that was based on verbal protocols that utilized latent semantic analysis lsa <eos> students were given self explanation reading training sert which teaches strategies that facilitate self explanation during reading such as elaboration based on world knowledge and bridging between text sentences <eos> during a computerized version of sert practice students read texts and typed self explanations into a computer after each sentence <eos> the use of sert strategies during this practice was assessed by determining the extent to which students used the information in the current sentence versus the prior text or world knowledge in their self explanations <eos> this assessment was made on the basis of human judgments and lsa <eos> both human judgments and lsa were remarkably similar and indicated that students who were not complying with sert tended to paraphrase the text sentences whereas students who were compliant with sert tended to explain the sentences in terms of what they knew about the world and of information provided in the prior text context <eos> the similarity between human judgments and lsa indicates that lsa will be useful in accounting for reading strategies in a web based version of sert
+
+[TARGET]: latent semantic analysis; reader strategy assessment; computer based procedure; verbal protocols; self explanation reading training; elaboration; world knowledge; text sentence bridging; human judgments;
+[DECODE]: 15 predictions
+		[4.250]paper
+		[4.329]human computer interaction
+		[4.987]research
+		[5.104]<unk>
+		[5.200]text
+		[5.327]text categorization
+		[5.507]natural language understanding
+		[5.578]language
+		[5.583]information retrieval
+		[5.609]computer mediated communication
+		[5.684]task
+		[6.182]text analysis
+		[6.221]cognitive impairment
+		[6.262]natural language processing
+		[6.619]information technology
