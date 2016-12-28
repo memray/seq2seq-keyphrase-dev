@@ -6,9 +6,10 @@ import time
 import nltk
 import numpy as np
 
-import config
+import keyphrase.config
 from emolga.dataset.build_dataset import *
 import re
+from keyphrase_test_dataset import *
 
 MULTI_OUTPUT = False
 TOKENIZE_SENTENCE = True
@@ -18,13 +19,18 @@ wordfreq = dict()
 SENTENCEDELIMITER = '<eos>'
 DIGIT = '<digit>'
 
+'''
+    desperated
+    an old function for load and parse data
+'''
+
 def get_tokens(text, type=1):
     '''
-
+    parse the feed-in text, filtering and tokenization
     :param text:
     :param type: 0 is old way, only keep [_<>,], do sentence boundary detection, replace digits to <digit>
                  1 is new way, keep [_<>,\(\)\.\'%], replace digits to <digit>, split by [^a-zA-Z0-9_<>,\(\)\.\'%]
-    :return:
+    :return: a list of tokens
     '''
     if type == 0:
         text = re.sub(r'[\r\n\t]', ' ', text)
@@ -53,11 +59,16 @@ def get_tokens(text, type=1):
 
 
 def load_data(input_path, tokenize_sentence=True):
+    '''
+    :param input_path:
+    :param tokenize_sentence:
+    :return:
+    '''
     global wordfreq
 
-    # data set
-    pairs = []
-    f     = open(input_path, 'r')
+    # load data set from json
+    pairs   = []
+    f       = open(input_path, 'r')
     records = json.load(f)
 
     for id, record in enumerate(records):
@@ -66,9 +77,6 @@ def load_data(input_path, tokenize_sentence=True):
         # record['keyword'] = record['abstract'].encode('utf8')
 
         # record = json.loads(record)
-        if record['abstract'].find('(svm)') > -1 or record['keyword'].find('(svm)') > -1:
-            print(record)
-
         if (tokenize_sentence):
             text = record['abstract'].replace('e.g.','eg')
             title =  re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', record['title'])
@@ -107,10 +115,6 @@ def load_data(input_path, tokenize_sentence=True):
                 else:
                     wordfreq[w] += 1
 
-        # if multi_output:
-        #     pairs.append((text, keyphrases))
-        # else:
-        #     pairs.extend([(text,k) for k in keyphrases])
         pairs.append((text, keyphrases))
         if id % 10000 == 0:
             print('%d \n\t%s \n\t%s' % (id, text, keyphrases))
@@ -175,8 +179,13 @@ def build_data(data, idx2word, word2idx):
     return instance
 
 def load_data_and_dict(training_dataset, testing_dataset):
+    '''
+    here dict is built on both training and testing dataset, which may be not suitable (testing data should be unseen)
+    :param training_dataset,testing_dataset: path
+    :return:
+    '''
     global wordfreq
-    # do not do one2one as it consumes too much memory, parse to one2one before training
+
     train_pairs = load_data(training_dataset)
     test_pairs = load_data(testing_dataset)
     print('read dataset done.')
@@ -194,12 +203,6 @@ def load_data_and_dict(training_dataset, testing_dataset):
     print('Test pairs:  %d' % len(test_pairs))
     print('Dict size:   %d' % len(idx2word))
     return train_set, test_set, idx2word, word2idx
-
-
-def load_additional_testing_data(testing_path, idx2word, word2idx):
-    test_pairs = load_data(testing_path)
-    test_set = build_data(test_pairs, idx2word, word2idx)
-    return test_set
 
 if __name__ == '__main__':
     # config = config.setup_keyphrase_all()

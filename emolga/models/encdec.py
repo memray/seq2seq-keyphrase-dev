@@ -1745,6 +1745,17 @@ class NRM(Model):
                                       # , mode='DebugMode'
                                       )
 
+        self.train_guard = theano.function(train_inputs,
+                                      [loss_rec, loss_ppl],
+                                      updates=updates,
+                                      name='train_nanguard_fun',
+                                      mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True))
+
+        self.validate_ = theano.function(train_inputs,
+                                      [loss_rec, loss_ppl],
+                                      name='validate_fun',
+                                      allow_input_downcast=True)
+
         logger.info("training functions compile done.")
 
         # # add monitoring:

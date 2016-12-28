@@ -9,20 +9,19 @@ def setup_keyphrase_all():
     config = dict()
     # config['seed']            = 3030029828
     config['seed']            = 19900226
-    # config['task_name']       = 'keyphrase-irbooks.one2one.nocopy'
-    config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
+    config['task_name']       = 'keyphrase-all.one2one.nocopy'
+    # config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
     config['timemark']        = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
 
     config['use_noise']       = False
     config['optimizer']       = 'adam'
-    config['clipnorm']        = 0.01
+    config['clipnorm']        = 0.1
 
     config['save_updates']    = True
     config['get_instance']    = True
 
-    config['path']            = path.realpath(path.curdir)
-
-    config['path_experiment'] = path.realpath(path.curdir) + '/Experiment/'+config['task_name']
+    config['path']            = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)) #path.realpath(path.curdir)
+    config['path_experiment'] = config['path'] + '/Experiment/'+config['task_name']
     config['path_h5']         = config['path_experiment']
     config['path_log']        = config['path_experiment']
 
@@ -36,22 +35,26 @@ def setup_keyphrase_all():
     config['testing_datasets']= ['inspec', 'nus', 'semeval']
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
-    config['dataset']         = config['path'] + '/dataset/keyphrase/all_600k_dataset.pkl'
-    config['voc']             = config['path'] + '/dataset/keyphrase/all_600k_voc.pkl' # for manual check
+    config['data_process_name'] = 'eos-punctuation-1000validation/'
+
+    config['validation_size'] = 1000
+    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id.pkl'
+    config['dataset']         = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_dataset.pkl'
+    config['voc']             = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_voc.pkl' # for manual check
 
     # output log place
     if not os.path.exists(config['path_log']):
         os.mkdir(config['path_log'])
 
     # trained_model
-    config['trained_model']   = path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.copy/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=10000.pkl'
+    config['trained_model']   = None
     # A well-trained model on all data
     #   path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy.<eol><digit>.emb=100.hid=150/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     # A well-trained model on acm data
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     config['weight_json']= config['path_experiment'] + '/model_weight.json'
-    config['resume_training'] = True
-    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20161220-070035.epoch=2.batch=10000.pkl'
+    config['resume_training'] = False
+    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20161220-070035.epoch=2.batch=20000.pkl'
         #config['path_experiment'] + '/save_training_status.pkl'
 
     # # output hdf5 file.
@@ -84,7 +87,7 @@ def setup_keyphrase_all():
                                 else 2 * config['enc_hidden_dim']
 
     # Decoder: CopyNet
-    config['copynet']         = True
+    config['copynet']         = False
     config['identity']        = False
     config['location_embed']  = True
     config['coverage']        = True
@@ -99,7 +102,7 @@ def setup_keyphrase_all():
     config['deep_out_activ']  = 'tanh'  # maxout2
     config['bigram_predict']  = True
     config['context_predict'] = True
-    config['dropout']         = 0  # 5
+    config['dropout']         = 0.5  # 5
     config['leaky_predict']   = False
 
     config['dec_readout_dim'] = config['dec_hidden_dim']

@@ -201,7 +201,7 @@ class Adam(Optimizer):  # new Adam is designed for our purpose.
         Default parameters follow those provided in the original paper.
         We add Gaussian Noise to improve the performance.
     '''
-    def __init__(self, lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-8, save=False, rng=None, *args, **kwargs):
+    def __init__(self, lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=1e-8, save=False, rng=None, *args, **kwargs):
         super(Adam, self).__init__(**kwargs)
         self.__dict__.update(locals())
         print locals()

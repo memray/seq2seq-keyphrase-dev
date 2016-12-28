@@ -41,5 +41,23 @@ Experiment
         count < 1/5/10 = 15233415 / 1468437 / 287763
         max = 18.585939
 
-2. Copy net, clip_norm=2
+2. CopyNet
+    clip_norm=2,1,0.1,0.01...
+    lr=1e-3,1e-4,1e-5
     number of parameters: 78,835,750
+    cannot continue after epoch=2,batch=20000
+    maybe batchnorm will help
+    as this version doesn't rule out the testing data, will train again
+
+3. Similar to 1st experiment, train a naive rnn model (no copynet)
+        But training data doesn't include testing data, 1000 validation data is set to implement early stopping
+        Initial parameter:
+            - clipping=0.1
+            - lr = 1e-4
+            - dropout=0.5
+        Testing data: inspec, nus, semeval
+        Dataset statistics:
+            Train pairs      : 571267
+            Validation pairs : 1000
+            Test pairs       : 2395
+            Dict size        : 320393

@@ -11,8 +11,9 @@ import shutil
 import nltk
 
 from emolga.utils.generic_utils import get_from_module
-from keyphrase_dataset import get_tokens, build_data
-from config import setup_keyphrase_all, setup_keyphrase_all_testing
+
+import data_utils as utils
+from keyphrase.config import setup_keyphrase_all, setup_keyphrase_all_testing
 from emolga.dataset.build_dataset import deserialize_from_file, serialize_to_file
 __author__ = "Rui Meng"
 __email__ = "rui.meng@pitt.edu"
@@ -32,6 +33,23 @@ class DataLoader(object):
         self.basedir = self.basedir
         self.doclist = []
 
+    def get_docs(self):
+        '''
+        :return: a list of dict instead of the Document object
+        '''
+        self.load_text(self.textdir)
+        self.load_keyphrase(self.keyphrasedir)
+
+        doclist = []
+        for d in self.doclist:
+            newd = {}
+            newd['abstract']    = re.sub('[\r\n]', ' ', d.text).strip()
+            newd['title']       = re.sub('[\r\n]', ' ', d.title).strip()
+            newd['keyword']     = ';'.join(d.phrases)
+            doclist.append(newd)
+
+        return doclist
+
     def __call__(self, idx2word, word2idx, type = 1):
         self.load_text(self.textdir)
         self.load_keyphrase(self.keyphrasedir)
@@ -39,8 +57,8 @@ class DataLoader(object):
 
         for doc in self.doclist:
             try:
-                title= get_tokens(doc.title, type)
-                text = get_tokens(doc.text, type)
+                title= utils.get_tokens(doc.title, type)
+                text = utils.get_tokens(doc.text, type)
                 if type == 0:
                     title.append('<eos>')
                 elif type == 1:
@@ -53,7 +71,7 @@ class DataLoader(object):
                 if len(text) > 1500:
                     text = text[:1500]
 
-                keyphrases = [get_tokens(k, type) for k in doc.phrases]
+                keyphrases = [utils.get_tokens(k, type) for k in doc.phrases]
                 pairs.append((text, keyphrases))
 
             except UnicodeDecodeError:
@@ -61,7 +79,7 @@ class DataLoader(object):
             # print(text)
             # print(keyphrases)
             # print('*'*50)
-        dataset = build_data(pairs, idx2word, word2idx)
+        dataset = utils.build_data(pairs, idx2word, word2idx)
 
         return dataset, self.doclist
 
@@ -173,14 +191,9 @@ def load_testing_data(identifier, kwargs=None):
                            kwargs=kwargs)
     return data_loader
 
-
-
 if __name__ == '__main__':
     config = setup_keyphrase_all_testing()
     train_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
-
-
-
 
     for dataset_name in config['testing_datasets']:
         print('*' * 50)

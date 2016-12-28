@@ -17,18 +17,16 @@ theano.config.exception_verbosity='high'
 
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 
-from keyphrase import keyphrase_dataset
+#from keyphrase.dataset.keyphrase_train_dataset import *
 from keyphrase.config import *
 from emolga.utils.generic_utils import *
 from emolga.models.covc_encdec import NRM
 from emolga.models.encdec import NRM as NRM0
 from emolga.dataset.build_dataset import deserialize_from_file, serialize_to_file
-from keyphrase_dataset import load_additional_testing_data
 from collections import OrderedDict
 from fuel import datasets
 from fuel import transformers
 from fuel import schemes
-from keyphrase_test_dataset import load_testing_data
 
 setup = setup_keyphrase_all # setup_keyphrase_all_testing
 
@@ -181,7 +179,7 @@ if __name__ == '__main__':
     rng     = RandomStreams(n_rng.randint(2 ** 30))
     logger.info('Start!')
 
-    train_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
+    train_set, validation_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
     # test_set = load_additional_testing_data(config['path']+'/dataset/keyphrase/ir-books/expert-conflict-free.json', idx2word, word2idx)
 
     logger.info('Load data done.')
@@ -207,7 +205,8 @@ if __name__ == '__main__':
     train_data_source = np.array(train_set['source'])
     train_data_target = np.array(train_set['target'])
 
-    test_data_plain   = zip(*(test_set['source'],  test_set['target']))
+    # test_data_plain   = zip(*(test_set['source'],  test_set['target']))
+    test_data_plain = np.concatenate([zip(*(t['source'],  t['target'])) for t in test_set.values()])
 
     train_size        = len(train_data_plain)
     test_size         = len(test_data_plain)
@@ -235,6 +234,9 @@ if __name__ == '__main__':
 
     epoch   = 0
     epochs = 10
+    valid_best_score    = (float(sys.maxint),float(sys.maxint))
+    valids_not_improved = 0
+    patience            = 5
     while epoch < epochs:
         epoch += 1
         loss  = []
@@ -267,7 +269,7 @@ if __name__ == '__main__':
                 # batch_start = 40001
 
             for batch_id in range(batch_start, num_batches):
-
+                # 1. Prepare data
                 data_ids = name_ordering[batch_id * config['batch_size']:min((batch_id + 1) * config['batch_size'], len(train_data_plain))]
 
                 # obtain data
@@ -279,7 +281,9 @@ if __name__ == '__main__':
                     data_s, data_t = split_into_multiple_and_padding(data_s, data_t)
                 # validate whether add one unk to the end
                 loss_batch = []
-                # split into smaller batches, as some samples contains too many outputs, lead to out-of-memory  9195998617
+
+                # 2. Training
+                #       split into smaller batches, as some samples contains too many outputs, lead to out-of-memory  9195998617
                 for minibatch_id in range(int(math.ceil(len(data_s)/config['mini_batch_size']))):
                     mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
                     mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
@@ -287,8 +291,8 @@ if __name__ == '__main__':
                         data_c = cc_martix(mini_data_s, mini_data_t)
 
                          # data_c = prepare_batch(batch, 'target_c', data_t.shape[1])
-                        # loss += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
-                        loss += [agent.train_guard(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
+                        loss += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
+                        # loss += [agent.train_guard(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
                         loss_batch += [loss[-1]]
                     else:
                         loss += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
@@ -297,8 +301,8 @@ if __name__ == '__main__':
                 # print progress
                 progbar.update(batch_id, [('loss_reg', sum([l[0] for l in loss_batch]) / len(loss_batch)),
                                           ('ppl.', sum([l[1] for l in loss_batch]) / len(loss_batch))])
-
-                if False: #batch_id % 200 == 0:
+                # 3. Quick testing
+                if batch_id % 200 == 0:
                     print_case = '-' * 100 +'\n'
 
                     logger.info('Echo={} Evaluation Sampling.'.format(batch_id))
@@ -344,12 +348,52 @@ if __name__ == '__main__':
                     # write examples to log file
                     with open(config['casestudy_log'], 'w+') as print_case_file:
                         print_case_file.write(print_case)
+                # 4. Save model
                 if batch_id % 1000 == 0:
                     # save the weights every K rounds
                     agent.save(config['path_experiment'] + '/experiments.{0}.id={1}.epoch={2}.batch={3}.pkl'.format(config['task_name'], config['timemark'], epoch, batch_id))
                     # save the game(training progress) in case of interrupt!
                     serialize_to_file([name_ordering, batch_id], config['path_experiment'] + '/save_training_status.id={0}.epoch={1}.batch={2}.pkl'.format(config['timemark'], epoch, batch_id))
                     # agent.save_weight_json(config['path_experiment'] + '/weight.print.id={0}.epoch={1}.batch={2}.json'.format(config['timemark'], epoch, batch_id))
+
+                # 5. Evaluate on validation data, and do early-stopping
+                if batch_id % 10000 == 0 and batch_id > 1:
+                    logger.info('Validate @ epoch=%d, batch=%d' % (epoch, batch_id))
+                    # 1. Prepare data
+                    data_s = np.array(validation_set['source'])
+                    data_t = np.array(validation_set['target'])
+                    # if not multi_output, split one data (with multiple targets) into multiple ones
+                    if not config['multi_output']:
+                        data_s, data_t = split_into_multiple_and_padding(data_s, data_t)
+
+                    loss_valid = []
+
+                    for minibatch_id in range(int(math.ceil(len(data_s)/config['mini_batch_size']))):
+                        mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
+                        mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
+                        if config['copynet']:
+                            data_c = cc_martix(mini_data_s, mini_data_t)
+                            loss_valid += [agent.validate_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
+                        else:
+                            loss_valid += [agent.validate_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
+
+                        if minibatch_id % 10 == 0:
+                            print('\t %d / %d' % (minibatch_id, int(math.ceil(len(data_s)/config['mini_batch_size']))))
+
+                    logger.info('\tPrevious best score: \t ll=%f, \t ppl=%f' % (valid_best_score[0], valid_best_score[1]))
+                    logger.info('\tCurrent score: \t ll=%f, \t ppl=%f' % (np.mean([l[0] for l in loss_valid]), np.mean([l[1] for l in loss_valid])))
+
+                    if np.mean([l[0] for l in loss_valid]) < valid_best_score[0]:
+                        valid_best_score = (np.mean([l[0] for l in loss_valid]), np.mean([l[1] for l in loss_valid]))
+                        logger.info('New best score')
+                        valids_not_improved = 0
+                    else:
+                        valids_not_improved += 1
+                        logger.info('Not improved for %s tests.' % valids_not_improved)
+
+                    if valids_not_improved >= patience:
+                        print "Not improved for %s epochs. Stopping..." % patience
+                        break
 
         '''
         test accuracy and f-score at the end of each epoch
