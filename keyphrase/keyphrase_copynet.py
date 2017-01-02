@@ -110,6 +110,19 @@ def cc_martix(source, target):
                     cc[k][j][i] = 1.
     return cc
 
+def cc_martix_multi_output(source, target):
+    '''
+    return the copy matrix
+    '''
+    cc = np.zeros((source.shape[0], target.shape[1], source.shape[1]), dtype='float32')
+    for k in range(source.shape[0]): # go over each sample in source batch
+        for l in range(target.shape[0]):
+            for j in range(target.shape[1]): # go over each word in target (all target have same length after padding)
+                for i in range(source.shape[1]): # go over each word in source
+                    if (source[k, i] == target[k, j]) and (source[k, i] > 0): # if word match, set cc[k][j][i] = 1. Don't count non-word(source[k, i]=0)
+                        cc[k][l][j][i] = 1.
+    return cc
+
 
 def unk_filter(data):
     '''
@@ -300,7 +313,7 @@ if __name__ == '__main__':
                 #     mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
                 #     mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
                 dd = 0
-                max_size = 200000
+                max_size = 300000
                 stack_size = 0
                 mini_data_s = []
                 mini_data_t = []
@@ -310,12 +323,14 @@ if __name__ == '__main__':
                         mini_data_t.append(data_t[dd])
                         stack_size += len(data_s[dd]) * len(data_t[dd])
                         dd += 1
-
                     mini_data_s = np.asarray(mini_data_s)
                     mini_data_t = np.asarray(mini_data_t)
-                    if config['copynet']:
-                        data_c = cc_martix(mini_data_s, mini_data_t)
 
+                    if config['copynet']:
+                        if config['multi_output']:
+                            data_c = cc_martix_multi_output(mini_data_s, mini_data_t)
+                        else:
+                            data_c = cc_martix(mini_data_s, mini_data_t)
                          # data_c = prepare_batch(batch, 'target_c', data_t.shape[1])
                         loss_batch += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
                         # loss += [agent.train_guard(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
@@ -387,7 +402,7 @@ if __name__ == '__main__':
                     # agent.save_weight_json(config['path_experiment'] + '/weight.print.id={0}.epoch={1}.batch={2}.json'.format(config['timemark'], epoch, batch_id))
 
                 # 5. Evaluate on validation data, and do early-stopping
-                if batch_id % 20 == 0 and not (batch_id==0 and epoch==1):
+                if batch_id % 10 == 0 and not (batch_id==0 and epoch==1):
                     logger.info('Validate @ epoch=%d, batch=%d' % (epoch, batch_id))
                     # 1. Prepare data
                     data_s = np.array(validation_set['source'])
@@ -398,17 +413,35 @@ if __name__ == '__main__':
 
                     loss_valid = []
 
-                    for minibatch_id in range(int(math.ceil(len(data_s)/config['mini_batch_size']))):
-                        mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
-                        mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
+                    # for minibatch_id in range(int(math.ceil(len(data_s)/config['mini_batch_size']))):
+                    #     mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
+                    #     mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
+
+                    dd = 0
+                    max_size = 300000
+                    stack_size = 0
+                    mini_data_s = []
+                    mini_data_t = []
+                    while dd < len(data_s):
+                        while dd < len(data_s) and stack_size + len(data_s[dd]) * len(data_t[dd]) < max_size:
+                            mini_data_s.append(data_s[dd])
+                            mini_data_t.append(data_t[dd])
+                            stack_size += len(data_s[dd]) * len(data_t[dd])
+                            dd += 1
+                        mini_data_s = np.asarray(mini_data_s)
+                        mini_data_t = np.asarray(mini_data_t)
+
                         if config['copynet']:
                             data_c = cc_martix(mini_data_s, mini_data_t)
                             loss_valid += [agent.validate_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
                         else:
                             loss_valid += [agent.validate_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
 
-                        if minibatch_id % 10 == 0:
-                            print('\t %d / %d' % (minibatch_id, int(math.ceil(len(data_s)/config['mini_batch_size']))))
+                        print('\t %d / %d' % (dd, int(math.ceil(len(data_s)/config['mini_batch_size']))))
+
+                        mini_data_s = []
+                        mini_data_t = []
+                        stack_size = 0
 
                     logger.info('\tPrevious best score: \t ll=%f, \t ppl=%f' % (valid_best_score[0], valid_best_score[1]))
                     logger.info('\tCurrent score: \t ll=%f, \t ppl=%f' % (np.mean([l[0] for l in loss_valid]), np.mean([l[1] for l in loss_valid])))
