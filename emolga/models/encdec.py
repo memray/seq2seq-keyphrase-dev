@@ -1159,20 +1159,33 @@ class DecoderAtt(Decoder):
         # indicator for the first target word (bos target). Why it's [-1]?
         next_word = -1 * np.ones((1,)).astype('int32')
 
-        # if aim is extractive, then set the initial beam size to be voc_size
+        # if aim is extractive, then set the initial beam size to be large(=1000)
         if type == 'extractive':
-            k = self.config['voc_size']
+            k = self.config['voc_size'] # voc_size seems too large
             input = inputs[0]
             input_set = set(input)
 
         # Start searching!
         for ii in xrange(maxlen):
+            # print('context : %s' % str(context.shape))
+            # print('live_k  : %d' % live_k)
             # predict next_word
             ctx    = np.tile(context, [live_k, 1, 1])
             cmk    = np.tile(c_mask, [live_k, 1])
-            # based on the live_k alive prediction, predict the next word of them at a time. Return live_k groups of results (next_prob, next_word, next_state)
+            '''
+            Based on the live_k alive prediction, predict the next word of them at a time. Return live_k groups of results (next_prob, next_word, next_state)
+                next_prob   : live_k*Voc_size, contains the probabilities of predicted next word. \
+                next_word   : a list of 1*live_k given by = self.rng.multinomial(pvals=next_prob).argmax(1), not useful for beam-search.
+                next_state  : the current hidden state of decoder, size=live_k*D
+            '''
             next_prob, next_word, next_state \
-                = self.sample_next(next_word, next_state, ctx, cmk) # next_prob is live_k*Voc_size, contains the probabilities of predicted next word. next_word is a list of 1*live_k given by = self.rng.multinomial(pvals=next_prob).argmax(1), not useful for beam-search. next_state is the current hidden state of decoder, size=live_k*D
+                = self.sample_next(next_word, next_state, ctx, cmk)
+
+            # print('next_prob : %s' % str(next_prob.shape))
+            # print('next_word : %s' % str(next_word.shape))
+            # print('next_state: %s' % str(next_state.shape))
+
+            # print('-' * 20)
 
             if stochastic:
                 # using stochastic sampling (or greedy sampling.)
@@ -1191,12 +1204,20 @@ class DecoderAtt(Decoder):
             else:
                 # using beam-search
                 # we can only compute in a flatten way!
-                cand_scores = hyp_scores[:, None] - np.log(next_prob) # the smaller the better
+                '''
+                cand_scores stores the probs of extending the next word, based live_k last words
+                    hyp_scores[:, None] expend hyp_scores from 1d(live_k) to 2d(live_k*Voc)
+                '''
+                cand_scores = hyp_scores[:, None] - np.log(next_prob) # size=live_k*Voc , the smaller score the better
                 cand_flat = cand_scores.flatten() # transform the k*V into a list of [1*kV]
                 # get the index of highest words for each beam
                 ranks_flat = cand_flat.argsort()[:(k - dead_k)] # get the (global) top k prediction words
 
-                # fetch the best results. Get the index of best predictions. trans_index is the index of its previous word, word_index is the index of prediction
+                '''
+                fetch the best results. Get the index of best predictions.
+                    trans_index: the index of its previous word,
+                    word_index : the index of prediction
+                '''
                 voc_size = next_prob.shape[1]
                 trans_index = ranks_flat / voc_size
                 word_index = ranks_flat % voc_size
@@ -1206,7 +1227,12 @@ class DecoderAtt(Decoder):
                 new_hyp_samples = []
                 new_hyp_scores = np.zeros(k - dead_k).astype(theano.config.floatX)
                 new_hyp_states = []
-                # enumerate (last word, predicted word), store corresponding: 1. new_hyp_samples: current sequence; 2.new_hyp_scores: current score (probability); 3. new_hyp_states: the hidden state
+                '''
+                enumerate (last word, predicted word), store corresponding:
+                    1. new_hyp_samples: current sequence;
+                    2. new_hyp_scores : current score (probability);
+                    3. new_hyp_states : the hidden state
+                '''
                 for idx, [ti, wi] in enumerate(zip(trans_index, word_index)):
                     new_hyp_samples.append(hyp_samples[ti] + [wi])
                     new_hyp_scores[idx] = copy.copy(costs[idx])
@@ -1226,7 +1252,10 @@ class DecoderAtt(Decoder):
                         as only after predicting a <eol> , this prediction will be put into final results
                         '''
                         if (new_hyp_samples[idx][-1] == 0) and (not fixlen): # bug??? why new_hyp_states[idx][-1] == 0? I think it should be new_hyp_samples[idx][-1] == 0
-                            # if the predicted words is <eol>(reach the end), add to final list
+                            '''
+                            if the predicted words is <eol>(reach the end), add to final list
+                            in order to remove duplicate predictions, maintain a hashmap to store predictions
+                            '''
                             # sample.append(new_hyp_samples[idx])
                             # score.append(new_hyp_scores[idx])
 
@@ -1240,9 +1269,11 @@ class DecoderAtt(Decoder):
                             elif new_hyp_scores[idx] > predicted[key]:
                                 predicted[key] = (new_hyp_samples[idx], new_hyp_scores[idx])
                         else:
-                            # not end, check whether current new_hyp_samples[idx] is in original text,
-                            # if yes, add the queue for predicting next round
-                            # if no, discard
+                            '''
+                            not end, check whether current new_hyp_samples[idx] is in original text,
+                                if yes, add the queue for predicting next round
+                                if no, discard
+                            '''
                             if new_hyp_samples[idx][-1] not in input_set:
                                 continue
                             for i in range(len(input) - len(new_hyp_samples[idx]) + 1):
@@ -1286,9 +1317,19 @@ class DecoderAtt(Decoder):
                     break
                 # if dead_k >= k:
                 #     break
+
                 # set the predicted word and hidden_state as the next_word and next_state
                 next_word = np.array([w[-1] for w in hyp_samples])
                 next_state = np.array(hyp_states)
+
+                # to avoid memory overflow, only keep the top few predictions
+                # if live_k > 100:
+                #     live_k      = 100
+                #     next_word   = np.array(next_word[:live_k])
+                #     next_state  = np.array(next_state[:live_k])
+                #     hyp_samples = np.array(hyp_samples[:live_k])
+                #     hyp_scores  = np.array(hyp_samples[:live_k])
+                #     hyp_states  = np.array(hyp_samples[:live_k])
                 pass
             pass
 
@@ -1728,9 +1769,9 @@ class NRM(Model):
             logPxz, logPPL     = self.decoder.build_decoder(target, code, c_mask)
 
         # responding loss
-        loss_rec = T.mean(-logPxz) # get the mean of cross-entropy of this batch
-        loss_ppl = T.exp(T.mean(-logPPL))
-        loss     = loss_rec
+        loss_rec = -logPxz # get the mean of cross-entropy of this batch
+        loss_ppl = T.exp(-logPPL)
+        loss     = T.mean(loss_rec)
 
         updates  = self.optimizer.get_updates(self.params, loss)
 
@@ -1979,6 +2020,7 @@ class NRM(Model):
                     match = None
                     for i in range(len(stemmed_input) - len(target) + 1):
                         match = None
+                        j = 0
                         for j in range(len(target)):
                             if target[j] != stemmed_input[i + j]:
                                 match = False
@@ -2033,6 +2075,7 @@ class NRM(Model):
                     match = None
                     for i in range(len(stemmed_input) - len(predict) + 1):
                         match = None
+                        j = 0
                         for j in range(len(predict)):
                             if predict[j] != stemmed_input[i + j]:
                                 match = False

@@ -8,8 +8,8 @@ import os.path as path
 def setup_keyphrase_all():
     config = dict()
     # config['seed']            = 3030029828
-    config['seed']            = 19900226
-    config['task_name']       = 'keyphrase-all.one2one.nocopy'
+    config['seed']            = 900227
+    config['task_name']       = 'keyphrase-all.one2one.copy'
     # config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
     config['timemark']        = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
 
@@ -54,7 +54,7 @@ def setup_keyphrase_all():
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     config['weight_json']= config['path_experiment'] + '/model_weight.json'
     config['resume_training'] = False
-    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20161220-070035.epoch=2.batch=20000.pkl'
+    config['training_archive']= None #config['path_experiment'] + '/save_training_status.id=20161229-135001.epoch=1.batch=1000.pkl'
         #config['path_experiment'] + '/save_training_status.pkl'
 
     # # output hdf5 file.
@@ -63,8 +63,8 @@ def setup_keyphrase_all():
     #     os.mkdir(config['weights_file'])
 
     # size
-    config['batch_size']      = 10
-    config['mini_batch_size'] = 10
+    config['batch_size']      = 100
+    config['mini_batch_size'] = 20
     config['mode']            = 'RNN'  # NTM
     config['binary']          = False
     config['voc_size']        = 50000
@@ -87,7 +87,7 @@ def setup_keyphrase_all():
                                 else 2 * config['enc_hidden_dim']
 
     # Decoder: CopyNet
-    config['copynet']         = False
+    config['copynet']         = True
     config['identity']        = False
     config['location_embed']  = True
     config['coverage']        = True

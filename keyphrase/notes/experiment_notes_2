@@ -37,7 +37,7 @@ Experiment
     Macro-Precision@10=0.208500, Macro-Recall@10=0.275611, Macro-F1-score10=0.237404
 
     Parameter
-        total = 70389000
+        total = 70,389,000
         count < 1/5/10 = 15233415 / 1468437 / 287763
         max = 18.585939
 
@@ -51,6 +51,7 @@ Experiment
 
 3. Similar to 1st experiment, train a naive rnn model (no copynet)
         But training data doesn't include testing data, 1000 validation data is set to implement early stopping
+        #(parameter)=70,389,000
         Initial parameter:
             - clipping=0.1
             - lr = 1e-4
