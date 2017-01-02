@@ -13,7 +13,7 @@ import theano
 
 import keyphrase_utils
 
-# theano.config.optimizer='fast_compile'
+theano.config.optimizer='fast_compile'
 theano.config.exception_verbosity='high'
 # theano.config.compute_test_value = 'warn'
 
@@ -30,7 +30,7 @@ from fuel import datasets
 from fuel import transformers
 from fuel import schemes
 
-setup = setup_keyphrase_all_testing # setup_keyphrase_all_testing
+setup = setup_keyphrase_all # setup_keyphrase_all_testing
 
 class LoggerWriter:
     def __init__(self, level):
@@ -211,10 +211,14 @@ if __name__ == '__main__':
     train_data_target = np.array(train_set['target'])
 
     # test_data_plain   = zip(*(test_set['source'],  test_set['target']))
+
     # trunk the over-long input in testing data
     for test_set in test_sets.values():
         test_set['source'] = [s if len(s)<1000 else s[:1000] for s in test_set['source']]
     test_data_plain = np.concatenate([zip(*(t['source'],  t['target'])) for t in test_sets.values()])
+
+    print('Avg length=%d, Max length=%d' % (
+    np.average([len(s[0]) for s in test_data_plain]), np.max([len(s[0]) for s in test_data_plain])))
 
     train_size        = len(train_data_plain)
     test_size         = len(test_data_plain)
@@ -250,14 +254,14 @@ if __name__ == '__main__':
         loss  = []
 
         # do training?
-        # do_train     = True
-        do_train   = False
+        do_train     = True
+        # do_train   = False
         # do predicting?
-        do_predict = True
-        # do_predict   = False
+        # do_predict = True
+        do_predict   = False
         # do testing?
-        do_evaluate  = True
-        # do_evaluate  = False
+        # do_evaluate  = True
+        do_evaluate  = False
 
         if do_train:
             # train_batches = output_stream(train_data, config['batch_size']).get_epoch_iterator(as_dict=True)
@@ -272,7 +276,7 @@ if __name__ == '__main__':
             batch_start = 0
 
             if config['resume_training'] and epoch == 1:
-                name_ordering, batch_start = deserialize_from_file(config['training_archive'])
+                name_ordering, batch_start, loss = deserialize_from_file(config['training_archive'])
                 batch_start += 1
                 # batch_start = 40001
 
@@ -292,25 +296,43 @@ if __name__ == '__main__':
 
                 # 2. Training
                 #       split into smaller batches, as some samples contains too many outputs, lead to out-of-memory  9195998617
-                for minibatch_id in range(int(math.ceil(len(data_s)/config['mini_batch_size']))):
-                    mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
-                    mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
+                # for minibatch_id in range(int(math.ceil(len(data_s)/config['mini_batch_size']))):
+                #     mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
+                #     mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
+                dd = 0
+                max_size = 200000
+                stack_size = 0
+                mini_data_s = []
+                mini_data_t = []
+                while dd < len(data_s):
+                    while dd < len(data_s) and stack_size + len(data_s[dd]) * len(data_t[dd]) < max_size:
+                        mini_data_s.append(data_s[dd])
+                        mini_data_t.append(data_t[dd])
+                        stack_size += len(data_s[dd]) * len(data_t[dd])
+                        dd += 1
+
+                    mini_data_s = np.asarray(mini_data_s)
+                    mini_data_t = np.asarray(mini_data_t)
                     if config['copynet']:
                         data_c = cc_martix(mini_data_s, mini_data_t)
 
                          # data_c = prepare_batch(batch, 'target_c', data_t.shape[1])
-                        loss += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
+                        loss_batch += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
                         # loss += [agent.train_guard(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
-                        loss_batch += [loss[-1]]
                     else:
-                        loss += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
-                        loss_batch += [loss[-1]]
+                        loss_batch += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
 
+                    mini_data_s = []
+                    mini_data_t = []
+                    stack_size  = 0
+                mean_ll  = np.average(np.concatenate([l[0] for l in loss_batch]))
+                mean_ppl = np.average(np.concatenate([l[1] for l in loss_batch]))
+                loss.append([mean_ll, mean_ppl])
                 # print progress
-                progbar.update(batch_id, [('loss_reg', sum([l[0] for l in loss_batch]) / len(loss_batch)),
-                                          ('ppl.', sum([l[1] for l in loss_batch]) / len(loss_batch))])
+                progbar.update(batch_id, [('loss_reg', loss[-1][0]),
+                                          ('ppl.', loss[-1][1])])
                 # 3. Quick testing
-                if batch_id % 200 == 0:
+                if batch_id % 10 == 0 and batch_id > 1:
                     print_case = '-' * 100 +'\n'
 
                     logger.info('Echo={} Evaluation Sampling.'.format(batch_id))
@@ -357,15 +379,15 @@ if __name__ == '__main__':
                     with open(config['casestudy_log'], 'w+') as print_case_file:
                         print_case_file.write(print_case)
                 # 4. Save model
-                if batch_id % 1000 == 0:
+                if batch_id % 10 == 0 and batch_id > 1:
                     # save the weights every K rounds
                     agent.save(config['path_experiment'] + '/experiments.{0}.id={1}.epoch={2}.batch={3}.pkl'.format(config['task_name'], config['timemark'], epoch, batch_id))
                     # save the game(training progress) in case of interrupt!
-                    serialize_to_file([name_ordering, batch_id], config['path_experiment'] + '/save_training_status.id={0}.epoch={1}.batch={2}.pkl'.format(config['timemark'], epoch, batch_id))
+                    serialize_to_file([name_ordering, batch_id, loss], config['path_experiment'] + '/save_training_status.id={0}.epoch={1}.batch={2}.pkl'.format(config['timemark'], epoch, batch_id))
                     # agent.save_weight_json(config['path_experiment'] + '/weight.print.id={0}.epoch={1}.batch={2}.json'.format(config['timemark'], epoch, batch_id))
 
                 # 5. Evaluate on validation data, and do early-stopping
-                if batch_id % 10000 == 0 and batch_id > 1:
+                if batch_id % 20 == 0 and not (batch_id==0 and epoch==1):
                     logger.info('Validate @ epoch=%d, batch=%d' % (epoch, batch_id))
                     # 1. Prepare data
                     data_s = np.array(validation_set['source'])
