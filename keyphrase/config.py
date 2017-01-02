@@ -114,6 +114,10 @@ def setup_keyphrase_all():
 
     # Decoder: sampling
     config['multi_output']    = False
+
+    config['decode_unk']      = False
+    config['explicit_loc']    = False
+
     config['max_len']         = 8
     config['sample_beam']     = 50
     config['sample_stoch']    = False # use beamsearch
@@ -151,20 +155,19 @@ def setup_keyphrase_all_testing():
     config = dict()
     # config['seed']            = 3030029828
     config['seed']            = 19900226
-    # config['task_name']       = 'keyphrase-irbooks.one2one.nocopy'
-    config['task_name']       = 'copynet-keyphrase-all.one2one.nocopy'
+    config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
+    # config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
     config['timemark']        = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
 
     config['use_noise']       = False
     config['optimizer']       = 'adam'
-    config['clipnorm']        = 10
+    config['clipnorm']        = 0.1
 
     config['save_updates']    = True
     config['get_instance']    = True
 
-    config['path']            = path.realpath(path.curdir)
-
-    config['path_experiment'] = path.realpath(path.curdir) + '/Experiment/'+config['task_name']
+    config['path']            = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)) #path.realpath(path.curdir)
+    config['path_experiment'] = config['path'] + '/Experiment/'+config['task_name']
     config['path_h5']         = config['path_experiment']
     config['path_log']        = config['path_experiment']
 
@@ -175,25 +178,30 @@ def setup_keyphrase_all_testing():
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['inspec']#['nus', 'semeval']
-    config['preprocess_type'] = 0 # 0 is old type, 1 is new type(keep most punctuation)
+    config['testing_datasets']= ['inspec', 'nus', 'semeval'] # 'inspec', 'nus', 'semeval'
+    config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
-    config['dataset']         = config['path'] + '/dataset/keyphrase/all_600k_dataset.pkl'
-    config['voc']             = config['path'] + '/dataset/keyphrase/all_600k_voc.pkl' # for manual check
+    config['data_process_name'] = 'eos-punctuation-1000validation/'
+
+    config['validation_size'] = 1000
+    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id.pkl'
+    config['dataset']         = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_dataset.pkl'
+    config['voc']             = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_voc.pkl' # for manual check
 
     # output log place
     if not os.path.exists(config['path_log']):
         os.mkdir(config['path_log'])
 
     # trained_model
-    config['trained_model']   = path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy.<eol><digit>.emb=100.hid=150/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
-    #path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161207-202026.epoch=1.batch=7200.pkl'
+    config['trained_model']   = config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
     # A well-trained model on all data
     #   path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy.<eol><digit>.emb=100.hid=150/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     # A well-trained model on acm data
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
+    config['weight_json']= config['path_experiment'] + '/model_weight.json'
     config['resume_training'] = False
-    config['training_archive']= config['path_experiment'] + '/save_training_status.pkl'
+    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20161220-070035.epoch=2.batch=20000.pkl'
+        #config['path_experiment'] + '/save_training_status.pkl'
 
     # # output hdf5 file.
     # config['weights_file']    = config['path'] + '/froslass/model-pool/'
@@ -211,21 +219,21 @@ def setup_keyphrase_all_testing():
     config['bidirectional']   = True
     config['enc_use_contxt']  = False
     config['enc_learn_nrm']   = True
-    config['enc_embedd_dim']  = 100    # 100
-    config['enc_hidden_dim']  = 150    # 150
+    config['enc_embedd_dim']  = 150    # 100
+    config['enc_hidden_dim']  = 300    # 150
     config['enc_contxt_dim']  = 0
     config['encoder']         = 'RNN'
     config['pooling']         = False
 
     # Decoder: dimension
-    config['dec_embedd_dim']  = 100  # 100
-    config['dec_hidden_dim']  = 150  # 150
+    config['dec_embedd_dim']  = 150  # 100
+    config['dec_hidden_dim']  = 300  # 180
     config['dec_contxt_dim']  = config['enc_hidden_dim']       \
                                 if not config['bidirectional'] \
                                 else 2 * config['enc_hidden_dim']
 
     # Decoder: CopyNet
-    config['copynet']         = False
+    config['copynet']         = True
     config['identity']        = False
     config['location_embed']  = True
     config['coverage']        = True
@@ -252,14 +260,20 @@ def setup_keyphrase_all_testing():
 
     # Decoder: sampling
     config['multi_output']    = False
-    config['max_len']         = 8
-    config['sample_beam']     = 50
+
+    config['decode_unk']      = False
+    config['explicit_loc']    = False
+
+    config['max_len']         = 6
+    config['sample_beam']     = 200 # for extractive prediction
     config['sample_stoch']    = False # use beamsearch
     config['sample_argmax']   = False
 
     config['predict_type']    = 'extractive' # type of prediction, extractive or generative
     config['predict_path']    = config['path_experiment'] + '/predict.' + config['timemark']+ '/'
-                                # '/copynet-keyphrase-all.one2one.nocopy.extractive.predict.pkl'
+                                # config['path_experiment'] + '/predict.20161230-145652/'
+                                # config['path_experiment'] + '/predict.' + config['timemark']+ '/'
+
     if not os.path.exists(config['predict_path']):
         os.mkdir(config['predict_path'])
 
@@ -271,7 +285,9 @@ def setup_keyphrase_all_testing():
     config['normalize_score']   = False #
     # config['normalize_score']   = True
     config['target_filter']     = 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
-    config['predict_filter']    = None # whether do filtering on predictions? 'appear-only'(don't work on extractive predicting),'non-appear-only' and None
+    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
+    config['keep_longest']      = True # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
+    config['number_to_predict'] = 10 # [desperated] the k in P@k,R@k,F1@k
 
     # Gradient Tracking !!!
     config['gradient_check']  = True
@@ -283,6 +299,13 @@ def setup_keyphrase_all_testing():
     #     print '{0} => {1}'.format(w, config[w])
     # print 'setup ok.'
     return config
+
+
+
+
+
+
+
 
 
 def setup_keyphrase_acm():

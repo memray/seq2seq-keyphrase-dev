@@ -54,7 +54,7 @@ class Model(object):
             params = self.params
 
         for p, w in zip(params, weights):
-            # print p.name
+            print p.name
             if p.eval().shape != w.shape:
                 raise Exception("Layer shape %s not compatible with weight shape %s." % (p.eval().shape, w.shape))
             p.set_value(floatX(w))

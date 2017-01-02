@@ -41,6 +41,8 @@ Experiment
         count < 1/5/10 = 15233415 / 1468437 / 287763
         max = 18.585939
 
+    Data: dataset/keyphrase/eos-punctuation-no_validation/
+
 2. CopyNet
     clip_norm=2,1,0.1,0.01...
     lr=1e-3,1e-4,1e-5
@@ -48,6 +50,133 @@ Experiment
     cannot continue after epoch=2,batch=20000
     maybe batchnorm will help
     as this version doesn't rule out the testing data, will train again
+
+    Testing on Inspec:
+    Prediction Directory:copynet-keyphrase-all.one2one.copy/predict.20161230-145652
+    Data: dataset/keyphrase/eos-punctuation-no_validation/
+
+    Predict params:
+        config['max_len']         = 6
+        config['sample_beam']     = 1000 # for extractive prediction
+        config['predict_type']    = 'extractive' # type of prediction, extractive or generative
+
+    1. didn't filter non-appear phrases
+        Log: experiments.copynet-keyphrase-all.one2one.copy.id=20161230-201623.log
+        Precision@5=0.234900, Recall@5=0.196924, F1-score5=0.196583
+        Macro-Precision@5=0.234900, Macro-Recall@5=0.168194, Macro-F1-score5=0.196028
+
+        Precision@10=0.168050, Recall@10=0.270445, F1-score10=0.191894
+        Macro-Precision@10=0.168050, Macro-Recall@10=0.240656, Macro-F1-score10=0.197904
+
+        Precision@15=0.134467, Recall@15=0.318686, F1-score15=0.176841
+        Macro-Precision@15=0.134467, Macro-Recall@15=0.288844, Macro-F1-score15=0.183505
+
+    2. filter non-appear phrases
+        Log: experiments.copynet-keyphrase-all.one2one.copy.id=20161230-202617.log
+        Precision@5=0.313500, Recall@5=0.267870, F1-score5=0.264602
+        Macro-Precision@5=0.313500, Macro-Recall@5=0.224474, Macro-F1-score5=0.261621
+
+        Precision@10=0.244350, Recall@10=0.387334, F1-score10=0.278088
+        Macro-Precision@10=0.244350, Macro-Recall@10=0.349921, Macro-F1-score10=0.287758
+
+        Precision@15=0.196467, Recall@15=0.446257, F1-score15=0.255835
+        Macro-Precision@15=0.196467, Macro-Recall@15=0.422025, Macro-F1-score15=0.268116
+
+    3. filter partial phrases, if one phrase is part of another phrase, discard it
+        Log: experiments.copynet-keyphrase-all.one2one.copy.id=20161230-230330.log
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=3523
+        Micro:		P@5=0.352300, R@5=0.264033, F1@5=0.281552
+        Macro:		P@5=0.352300, R@5=0.252255, F1@5=0.294000
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=4927
+        Micro:		P@10=0.246350, R@10=0.342691, F1@10=0.268914
+        Macro:		P@10=0.246350, R@10=0.352785, F1@10=0.290114
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=5293
+        Micro:		P@15=0.176433, R@15=0.359366, F1@15=0.223330
+        Macro:		P@15=0.176433, R@15=0.378992, F1@15=0.240777
+
+    4. filter partial phrases, keep len(phrase)=1 (affects a lot), keep phrases starts/ends with stopword (not very effective)
+        Log: experiments.copynet-keyphrase-all.one2one.copy.id=20161231-004846.log
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=2744
+        Micro:		P@5=0.274400, R@5=0.214355, F1@5=0.222350
+        Macro:		P@5=0.274400, R@5=0.196477, F1@5=0.228991
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=4464
+        Micro:		P@10=0.223200, R@10=0.334621, F1@10=0.249579
+        Macro:		P@10=0.223200, R@10=0.319633, F1@10=0.262851
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=5656
+        Micro:		P@15=0.188533, R@15=0.411198, F1@15=0.243214
+        Macro:		P@15=0.188533, R@15=0.404984, F1@15=0.257290
+
+        But there're some very wired single letter predictions, like the following ones:
+        I guess there must be some errors in training data, in which testing data is presented as letters
+            [SOURCE]: decisions , decisions , decisions a tale of special collections in the small <eos> a case study of a special collections department in a small academic library and how its collections have been acquired and developed over the years is described . <eos> it looks at the changes that have occurred in the academic environment and what effect , if any , these changes may have had on the department and how it has adapted to them . <eos> it raises questions about development and acquisitions policies and procedures
+            [TARGET]: 4/6 targets
+		                special collect; small academ librari; acquisit polici; case studi;
+            [DECODE]: 6/182 predictions
+                        [6.356]s p e c i a l
+                        [7.523]c o l l e c t
+                        [7.596]a c a d e m
+    5. filter punctuations, <eos>. Decrease! How come? the '<' and '>' should keep
+        Log: experiments.copynet-keyphrase-all.one2one.copy.id=20161231-022835.log
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=3514
+        Micro:		P@5=0.351400, R@5=0.261884, F1@5=0.280160
+        Macro:		P@5=0.351400, R@5=0.251611, F1@5=0.293249
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=4919
+        Micro:		P@10=0.245950, R@10=0.340198, F1@10=0.267982
+        Macro:		P@10=0.245950, R@10=0.352213, F1@10=0.289643
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=5279
+        Micro:		P@15=0.175967, R@15=0.356629, F1@15=0.222479
+        Macro:		P@15=0.175967, R@15=0.377989, F1@15=0.240140
+
+    6. filter punctuations, <eos>. keep '<' and '>' to avoid filtering phrases contain <digit>, kind of effective predictions
+        What?! Still slightly decreased!
+        Log: experiments.copynet-keyphrase-all.one2one.copy.id=20161231-024257.log
+        INSPEC
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=3519
+        Micro:		P@5=0.351900, R@5=0.263260, F1@5=0.280939
+        Macro:		P@5=0.351900, R@5=0.251969, F1@5=0.293666
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=4926
+        Micro:		P@10=0.246300, R@10=0.341848, F1@10=0.268604
+        Macro:		P@10=0.246300, R@10=0.352714, F1@10=0.290055
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=5293
+        Micro:		P@15=0.176433, R@15=0.358596, F1@15=0.223179
+        Macro:		P@15=0.176433, R@15=0.378992, F1@15=0.240777
+
+    7. Another prediction, change the config['sample_beam'] from 100 to 200
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=3628
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Micro:		P@5=0.362800, R@5=0.272123, F1@5=0.289624
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Macro:		P@5=0.362800, R@5=0.259774, F1@5=0.302762
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=5214
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Micro:		P@10=0.260700, R@10=0.362174, F1@10=0.284152
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Macro:		P@10=0.260700, R@10=0.373335, F1@10=0.307013
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=5723
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Micro:		P@15=0.190767, R@15=0.386270, F1@15=0.240893
+01/01/2017 07:32:45 [INFO] keyphrase_copynet: Macro:		P@15=0.190767, R@15=0.409781, F1@15=0.260338
+
+
+
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=920, Number of Correct=214
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Micro:		P@5=0.232609, R@5=0.113474, F1@5=0.148699
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Macro:		P@5=0.232609, R@5=0.106151, F1@5=0.145777
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=1840, Number of Correct=321
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Micro:		P@10=0.174457, R@10=0.171930, F1@10=0.168774
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Macro:		P@10=0.174457, R@10=0.159226, F1@10=0.166494
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=2760, Number of Correct=367
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Micro:		P@15=0.132971, R@15=0.195953, F1@15=0.154515
+01/01/2017 07:36:17 [INFO] keyphrase_copynet: Macro:		P@15=0.132971, R@15=0.182044, F1@15=0.153685
+
+    7. filter partial phrases, but if it appears very often, keep it (times>2)
+
 
 3. Similar to 1st experiment, train a naive rnn model (no copynet)
         But training data doesn't include testing data, 1000 validation data is set to implement early stopping
@@ -61,3 +190,9 @@ Experiment
             Validation pairs : 1000
             Test pairs       : 2395
             Dict size        : 320393
+
+
+    Data: dataset/keyphrase/eos-punctuation-1000validation/
+
+
+new projection type methods for monotone lcp with finite termination <eos> the monotone linear complementarity problem ( lcp ) . <eos> the methods are a combination of the extragradient method and the newton method , in which the active set strategy is used and only one linear system of equations with lower dimension is solved at each iteration . <eos> it is shown that under the assumption of monotonicity , these two methods are globally and linearly convergent . <eos> furthermore , under a nondegeneracy condition they have a finite termination property . <eos> finally , the methods are extended to solving the monotone affine variational inequality problem

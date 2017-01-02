@@ -8,7 +8,7 @@ import emolga.basic.initializations as initializations
 class Embedding(Layer):
     '''
         Turn positive integers (indexes) into denses vectors of fixed size.
-        eg. [[4], [20]] -> [[0.25, 0.1], [0.6, -0.2]]
+        e.g. [[4], [20]] -> [[0.25, 0.1], [0.6, -0.2]]
 
         @input_dim: size of vocabulary (highest input integer + 1)
         @out_dim: size of dense representation
@@ -31,8 +31,8 @@ class Embedding(Layer):
     def get_output_mask(self, X):
         '''
         T.ones_like(X): Return an array of ones with shape and type of input.
-        T.eq(X, 0): X==0?
-        1 - T.eq(X, 0): X!=0?
+            T.eq(X, 0): X==0?
+            1 - T.eq(X, 0): X!=0?
         :return an array shows that which x!=0
         '''
         return T.ones_like(X) * (1 - T.eq(X, 0))
@@ -40,9 +40,14 @@ class Embedding(Layer):
     def __call__(self, X, mask_zero=False, context=None):
         '''
         return the embedding of X
-        :param X: a set of words
+        :param X:         a set of words, all the X have same length due to padding
+                            shape=[nb_sample, max_len]
         :param mask_zero: whether return the mask of X, a list of [0,1] showing which x!=0
         :param context:
+        :return
+                emb_X:    embedding of X, shape = [nb_sample, max_len, emb_dim]
+                X_mask:   mask of X,      shape=[nb_sample, max_len]
+
         '''
         if context is None:
             out = self.W[X]

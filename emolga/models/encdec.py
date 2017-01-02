@@ -1,6 +1,6 @@
 import math
 
-__author__ = 'jiataogu'
+__author__ = 'jiataogu, memray'
 import theano
 
 import logging
@@ -258,8 +258,8 @@ class Encoder(Model):
         """
         Build the Encoder Computational Graph
 
-        nb_sample:  number of samples, defined by batch size
-        max_len:    max length of sentence (should be same after padding)
+        For the default configurations (with attention)
+            with_context=False, return_sequence=True, return_embed=True
         Input:
             source : source text, a list of indexes [nb_sample * max_len]
             context: None
@@ -271,7 +271,10 @@ class Encoder(Model):
                     X:      embedding of text X [nb_sample, max_len, enc_embedd_dim]
                     X_mask: mask, an array showing which elements in X are not 0 [nb_sample, max_len]
                     X_tail: encoding of ending of X, seems not make sense for bidirectional model (head+tail) [nb_sample, 2*enc_hidden_dim]
+                there's bug on X_tail, but luckily we don't use it often
 
+        nb_sample:  number of samples, defined by batch size
+        max_len:    max length of sentence (should be same after padding)
         """
         # Initial state
         Init_h = None
@@ -287,21 +290,25 @@ class Encoder(Model):
             else:
                 X_tail    = X_out
         else:
+            # reverse the source for backwardRNN
             source2 = source[:, ::-1]
             # map text to embedding
             X,  X_mask = self.Embed(source, True)
             X2, X2_mask = self.Embed(source2, True)
 
-            # get the encoding at each time t
+            # get the encoding at each time t. [Bug?] run forwardRNN on the reverse text?
             X_out1 = self.backwardRNN(X, X_mask,  C=context, init_h=Init_h, return_sequence=return_sequence)
             X_out2 = self.forwardRNN(X2, X2_mask, C=context, init_h=Init_h, return_sequence=return_sequence)
 
             # concatenate vectors of both forward and backward
             if not return_sequence:
+                # [Bug]I think the X_out of backwardRNN is time 0, but for forwardRNN is ending time
                 X_out  = T.concatenate([X_out1, X_out2], axis=1)
                 X_tail = X_out
             else:
+                # reverse the encoding of forwardRNN(actually backwardRNN), so the X_out is backward
                 X_out  = T.concatenate([X_out1, X_out2[:, ::-1, :]], axis=2)
+                # [Bug] X_out1[-1] is time 0, but X_out2[-1] is ending time
                 X_tail = T.concatenate([X_out1[:, -1], X_out2[:, -1]], axis=1)
 
         X_mask  = T.cast(X_mask, dtype='float32')
@@ -1116,12 +1123,14 @@ class DecoderAtt(Decoder):
         logger.info('done')
         pass
 
-    def get_sample(self, inputs, context, c_mask, k=1, maxlen=30, stochastic=True, argmax=False, fixlen=False, type='extractive'):
+    def get_sample(self, encoding, c_mask, inputs,
+                   k=1, maxlen=30, stochastic=True, argmax=False, fixlen=False,
+                   type='extractive'):
         '''
         Generate samples, either with stochastic sampling or beam-search!
         both inputs and context contain multiple sentences, so could this function generate sequence with regard to each input spontaneously?
-        :param inputs: used for extraction
-        :param context: the encoding of input sequence on each word, shape=len(sent)*(2*D), 2*D is due to bidirectional
+        :param inputs: the source text, used for extraction
+        :param encoding: the encoding of input sequence on each word, shape=len(sent)*(2*D), 2*D is due to bidirectional
         :param c_mask: whether x in input is not zero (is padding)
         :param k: config['sample_beam']
         :param maxlen: config['max_len']
@@ -1155,7 +1164,7 @@ class DecoderAtt(Decoder):
         hyp_states = []
 
         # get initial state of decoder RNN with context, size = 1*D
-        next_state = self.get_init_state(context)
+        next_state = self.get_init_state(encoding)
         # indicator for the first target word (bos target). Why it's [-1]?
         next_word = -1 * np.ones((1,)).astype('int32')
 
@@ -1168,11 +1177,12 @@ class DecoderAtt(Decoder):
         # Start searching!
         for ii in xrange(maxlen):
             # predict next_word
-            ctx    = np.tile(context, [live_k, 1, 1])
-            cmk    = np.tile(c_mask, [live_k, 1])
+            # make live_k copies of context and c_mask, to predict next word at once
+            encoding_copies    = np.tile(encoding, [live_k, 1, 1])
+            c_mask_copies      = np.tile(c_mask, [live_k, 1])
             # based on the live_k alive prediction, predict the next word of them at a time. Return live_k groups of results (next_prob, next_word, next_state)
             next_prob, next_word, next_state \
-                = self.sample_next(next_word, next_state, ctx, cmk) # next_prob is live_k*Voc_size, contains the probabilities of predicted next word. next_word is a list of 1*live_k given by = self.rng.multinomial(pvals=next_prob).argmax(1), not useful for beam-search. next_state is the current hidden state of decoder, size=live_k*D
+                = self.sample_next(next_word, next_state, encoding_copies, c_mask_copies) # next_prob is live_k*Voc_size, contains the probabilities of predicted next word. next_word is a list of 1*live_k given by = self.rng.multinomial(pvals=next_prob).argmax(1), not useful for beam-search. next_state is the current hidden state of decoder, size=live_k*D
 
             if stochastic:
                 # using stochastic sampling (or greedy sampling.)
@@ -1191,7 +1201,7 @@ class DecoderAtt(Decoder):
             else:
                 # using beam-search
                 # we can only compute in a flatten way!
-                cand_scores = hyp_scores[:, None] - np.log(next_prob) # the smaller the better
+                cand_scores = hyp_scores[:, None] - np.log(next_prob + 1e-10) # the smaller the better
                 cand_flat = cand_scores.flatten() # transform the k*V into a list of [1*kV]
                 # get the index of highest words for each beam
                 ranks_flat = cand_flat.argsort()[:(k - dead_k)] # get the (global) top k prediction words
@@ -1831,12 +1841,12 @@ class NRM(Model):
             # get the encoding of the inputs
             context = self.encoder.encode(inputs)
             # generate outputs
-            sample, score = self.decoder.get_sample(inputs, context, **args)
+            sample, score = self.decoder.get_sample(context, inputs, **args)
         else:
             # context: input sentence embedding
             # c_mask:  whether x in input is not zero (is padding)
             context, _, c_mask, _ = self.encoder.encode(inputs)
-            sample, score = self.decoder.get_sample(inputs, context, c_mask, **args)
+            sample, score = self.decoder.get_sample(context, c_mask, inputs, **args)
 
         if return_all:
             return sample, score

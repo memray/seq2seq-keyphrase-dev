@@ -11,6 +11,8 @@ import math
 
 import theano
 
+import keyphrase_utils
+
 # theano.config.optimizer='fast_compile'
 theano.config.exception_verbosity='high'
 # theano.config.compute_test_value = 'warn'
@@ -28,7 +30,7 @@ from fuel import datasets
 from fuel import transformers
 from fuel import schemes
 
-setup = setup_keyphrase_all # setup_keyphrase_all_testing
+setup = setup_keyphrase_all_testing # setup_keyphrase_all_testing
 
 class LoggerWriter:
     def __init__(self, level):
@@ -97,11 +99,14 @@ def prepare_batch(batch, mask, fix_len=None):
 
 
 def cc_martix(source, target):
+    '''
+    return the copy matrix
+    '''
     cc = np.zeros((source.shape[0], target.shape[1], source.shape[1]), dtype='float32')
-    for k in xrange(source.shape[0]):
-        for j in xrange(target.shape[1]):
-            for i in xrange(source.shape[1]):
-                if (source[k, i] == target[k, j]) and (source[k, i] > 0):
+    for k in xrange(source.shape[0]): # go over each sample in source batch
+        for j in xrange(target.shape[1]): # go over each word in target (all target have same length after padding)
+            for i in xrange(source.shape[1]): # go over each word in source
+                if (source[k, i] == target[k, j]) and (source[k, i] > 0): # if word match, set cc[k][j][i] = 1. Don't count non-word(source[k, i]=0)
                     cc[k][j][i] = 1.
     return cc
 
@@ -116,7 +121,7 @@ def unk_filter(data):
     if config['voc_size'] == -1:
         return copy.copy(data)
     else:
-        # mask shows whether each word is frequent or not, only word_index<config['voc_size']=1, else=0
+        # mask shows whether keeps each word (frequent) or not, only word_index<config['voc_size']=1, else=0
         mask = (np.less(data, config['voc_size'])).astype(dtype='int32')
         # low frequency word will be set to 1 (index of <unk>)
         data = copy.copy(data * mask + (1 - mask))
@@ -179,7 +184,7 @@ if __name__ == '__main__':
     rng     = RandomStreams(n_rng.randint(2 ** 30))
     logger.info('Start!')
 
-    train_set, validation_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
+    train_set, validation_set, test_sets, idx2word, word2idx = deserialize_from_file(config['dataset'])
     # test_set = load_additional_testing_data(config['path']+'/dataset/keyphrase/ir-books/expert-conflict-free.json', idx2word, word2idx)
 
     logger.info('Load data done.')
@@ -206,7 +211,10 @@ if __name__ == '__main__':
     train_data_target = np.array(train_set['target'])
 
     # test_data_plain   = zip(*(test_set['source'],  test_set['target']))
-    test_data_plain = np.concatenate([zip(*(t['source'],  t['target'])) for t in test_set.values()])
+    # trunk the over-long input in testing data
+    for test_set in test_sets.values():
+        test_set['source'] = [s if len(s)<1000 else s[:1000] for s in test_set['source']]
+    test_data_plain = np.concatenate([zip(*(t['source'],  t['target'])) for t in test_sets.values()])
 
     train_size        = len(train_data_plain)
     test_size         = len(test_data_plain)
@@ -242,14 +250,14 @@ if __name__ == '__main__':
         loss  = []
 
         # do training?
-        do_train     = True
-        # do_train   = False
+        # do_train     = True
+        do_train   = False
         # do predicting?
-        # do_predict = True
-        do_predict   = False
+        do_predict = True
+        # do_predict   = False
         # do testing?
-        # do_evaluate  = True
-        do_evaluate  = False
+        do_evaluate  = True
+        # do_evaluate  = False
 
         if do_train:
             # train_batches = output_stream(train_data, config['batch_size']).get_epoch_iterator(as_dict=True)
@@ -402,6 +410,11 @@ if __name__ == '__main__':
             for dataset_name in config['testing_datasets']:
                 # override the original test_set
                 # test_set = load_testing_data(dataset_name, kwargs=dict(basedir=config['path']))(idx2word, word2idx, config['preprocess_type'])
+
+                test_set = test_sets[dataset_name]
+
+                # print(dataset_name)
+                # print('Avg length=%d, Max length=%d' % (np.average([len(s) for s in test_set['source']]), np.max([len(s) for s in test_set['source']])))
                 test_data_plain = zip(*(test_set['source'], test_set['target']))
                 test_size = len(test_data_plain)
 
@@ -428,7 +441,7 @@ if __name__ == '__main__':
                     test_t_o_list.append(test_t_o)
 
                     inputs_unk = np.asarray(unk_filter(np.asarray(test_s, dtype='int32')), dtype='int32')
-                    print(len(inputs_unk))
+                    # print(len(inputs_unk))
 
                     prediction, score = agent.generate_multiple(inputs_unk[None, :], return_all=True)
                     predictions.append(prediction)
@@ -451,17 +464,17 @@ if __name__ == '__main__':
                 overall_score = {'p':0.0, 'r':0.0, 'f1':0.0}
                 # load from predicted result
                 # Evaluation
-                outs, metrics = agent.evaluate_multiple(test_s_list, test_t_list,
-                                                        test_s_o_list, test_t_o_list,
-                                                        predictions, scores, idx2word)
+                outs, metrics = keyphrase_utils.evaluate_multiple(config, test_s_list, test_t_list,
+                                                            test_s_o_list, test_t_o_list,
+                                                            predictions, scores, idx2word)
 
                 print_test.write(' '.join(outs))
                 logger.info('*' * 50)
 
-                # Get the Micro Measures
                 real_test_size = sum([1 if m['target_number'] > 0 else 0 for m in metrics])
 
                 for k in [5,10,15]:
+                    # Get the Micro Measures
                     overall_score['p@%d' % k] = float(sum([m['p@%d' % k] for m in metrics]))/float(real_test_size)
                     overall_score['r@%d' % k] = float(sum([m['r@%d' % k] for m in metrics]))/float(real_test_size)
                     overall_score['f1@%d' % k] = float(sum([m['f1@%d' % k] for m in metrics]))/float(real_test_size)
@@ -477,19 +490,20 @@ if __name__ == '__main__':
                     else:
                         overall_score['macro_f1@%d' % k] = 0
 
-                    str = 'Overall - %s valid testing data=%d, Number of Target=%d/%d, Number of Prediction=%d, Number of Correct=%d\n' % (config['predict_type'], real_test_size, valid_target_number, target_number, real_test_size * k, correct_number)
+                    str = 'Overall - %s valid testing data=%d, Number of Target=%d/%d, Number of Prediction=%d, Number of Correct=%d' % (config['predict_type'], real_test_size, valid_target_number, target_number, real_test_size * k, correct_number)
+                    logger.info(str)
+                    print_test.write(str)
+                    str = 'Micro:\t\tP@%d=%f, R@%d=%f, F1@%d=%f' % (k, overall_score['p@%d' % k], k, overall_score['r@%d' % k], k, overall_score['f1@%d' % k])
                     logger.info(str)
                     print_test.write(str)
 
-                    str = 'Precision@%d=%f, Recall@%d=%f, F1-score%d=%f\n' % (k, overall_score['p@%d' % k], k, overall_score['r@%d' % k], k, overall_score['f1@%d' % k])
+                    str = 'Macro:\t\tP@%d=%f, R@%d=%f, F1@%d=%f' % (k, overall_score['macro_p@%d' % k], k, overall_score['macro_r@%d' % k], k, overall_score['macro_f1@%d' % k])
                     logger.info(str)
                     print_test.write(str)
 
-                    str = 'Macro-Precision@%d=%f, Macro-Recall@%d=%f, Macro-F1-score%d=%f\n' % (k, overall_score['macro_p@%d' % k], k, overall_score['macro_r@%d' % k], k, overall_score['macro_f1@%d' % k])
-                    logger.info(str)
-                    print_test.write(str)
+                    print('-' * 50)
 
-                    logger.info(overall_score)
+                logger.info(overall_score)
                 print_test.close()
 
             exit()

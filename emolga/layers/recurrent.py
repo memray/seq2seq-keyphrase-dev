@@ -11,16 +11,21 @@ class Recurrent(MaskedLayer):
     @staticmethod
     def get_padded_shuffled_mask(mask, pad=0):
         """
-        What's going on here?
-            [1] change the 2D matrix into 3D.
-            [2]
+        change the order of dims of mask, to match the dim of inputs outside
+            [1] change the 2D matrix into 3D, (nb_samples, max_sent_len, 1)
+            [2] dimshuffle to (max_sent_len, nb_samples, 1)
+            the value on dim=0 could be either 0 or 1?
+        :param: mask, shows x is a word (!=0) or not(==0), shape=(n_samples, max_sent_len)
         """
+        # mask is (n_samples, time)
         assert mask, 'mask cannot be None'
-        # mask is (nb_samples, time)
-        mask = T.shape_padright(mask)    # (nb_samples, time, 1)
-        # mask = T.addbroadcast(mask, -1)
+        # pad a dim of 1 to the right, (nb_samples, max_sent_len, 1)
+        mask = T.shape_padright(mask)
+        # mask = T.addbroadcast(mask, -1), make the new dim broadcastable
         mask = T.addbroadcast(mask, mask.ndim-1)
-        mask = mask.dimshuffle(1, 0, 2)  # (time, nb_samples, 1)
+
+        # change the order of dims, to match the dim of inputs outside
+        mask = mask.dimshuffle(1, 0, 2)  # (max_sent_len, nb_samples, 1)
 
         if pad > 0:
             # left-pad in time with 0
@@ -44,6 +49,17 @@ class GRU(Recurrent):
             (nb_samples, output_dim)
         if return_sequences:
             (nb_samples, max_sample_length, output_dim)
+
+        z_t         = tanh(W_z*x + U_z*h_t-1 + b_z)
+        r_t         = tanh(W_r*x + U_r*h_t-1 + b_r)
+        hh_t        = tanh(W_h*x + U_r*(r_t*h_t-1) + b_h)
+        h_t         = z_t * h_t-1 + (1 - z_t) * hh_t
+
+        The doc product computation regarding x is independent from time
+            so it could be done out of the recurrent process (in advance)
+                x_z         = dot(X, self.W_z, self.b_z)
+                x_r         = dot(X, self.W_r, self.b_r)
+                x_h         = dot(X, self.W_h, self.b_h)
 
         References:
             On the Properties of Neural Machine Translation: Encoder–Decoder Approaches
@@ -71,15 +87,15 @@ class GRU(Recurrent):
         self.inner_init = initializations.get(inner_init)
         self.activation = activations.get(activation)
         self.inner_activation = activations.get(inner_activation)
-
+        # W is a matrix to map input x_t
         self.W_z = self.init((self.input_dim, self.output_dim))
         self.W_r = self.init((self.input_dim, self.output_dim))
         self.W_h = self.init((self.input_dim, self.output_dim))
-
+        # U is a matrix to map hidden state of last time h_t-1
         self.U_z = self.inner_init((self.output_dim, self.output_dim))
         self.U_r = self.inner_init((self.output_dim, self.output_dim))
         self.U_h = self.inner_init((self.output_dim, self.output_dim))
-
+        # bias terms
         self.b_z = shared_zeros(self.output_dim)
         self.b_r = shared_zeros(self.output_dim)
         self.b_h = shared_zeros(self.output_dim)
@@ -117,8 +133,25 @@ class GRU(Recurrent):
               xz_t, xr_t, xh_t, mask_t,
               h_tm1,
               u_z, u_r, u_h):
+        """
+        One step computation of GRU for a batch of data at time t
+                sequences=[x_z, x_r, x_h, padded_mask],
+                outputs_info=init_h,
+                non_sequences=[self.U_z, self.U_r, self.U_h]
+        :param xz_t, xr_t, xh_t:
+                        value of x of time t after gate z/r/h (computed beforehand)
+                            shape=(n_samples, output_emb_dim)
+        :param mask_t:  mask of time t, indicates whether t-th token is a word, shape=(n_samples, 1)
+        :param h_tm1:   hidden value (output) of last time, shape=(nb_samples, output_emb_dim)
+        :param u_z, u_r, u_h:
+                        mapping matrix for hidden state of time t-1
+                        shape=(output_emb_dim, output_emb_dim)
+        :return: h_t:   output, hidden state of time t, shape=(nb_samples, output_emb_dim)
+        """
         # h_mask_tm1 = mask_tm1 * h_tm1
         # Here we use a GroundHog-like style which allows
+
+        # activation value of update/reset gate, shape=(n_samples, 1)
         z          = self.inner_activation(xz_t + T.dot(h_tm1, u_z))
         r          = self.inner_activation(xr_t + T.dot(h_tm1, u_r))
         hh_t       = self.activation(xh_t + T.dot(r * h_tm1, u_h))
@@ -133,6 +166,13 @@ class GRU(Recurrent):
                    xz_t, xr_t, xh_t, mask_t,
                    h_tm1,
                    u_z, u_r, u_h):
+        """
+        One step computation of GRU
+        :returns
+            h_t:   output, hidden state of time t, shape=(n_samples, output_emb_dim)
+            z:     value of update gate (after activation), shape=(n_samples, 1)
+            r:     value of reset gate (after activation), shape=(n_samples, 1)
+        """
         # h_mask_tm1 = mask_tm1 * h_tm1
         # Here we use a GroundHog-like style which allows
         z          = self.inner_activation(xz_t + T.dot(h_tm1, u_z))
@@ -146,22 +186,22 @@ class GRU(Recurrent):
                  return_sequence=False, one_step=False,
                  return_gates=False):
         """
-        :param X:     input sequence, a list of word vectors
-        :param mask:  input mask, shows x is a word (!=0) or not(==0)
-        :param C:     context, for encoder is none
-        :param init_h:initial hidden state
+        :param X:       input sequence, a list of word vectors, shape=(n_samples, max_sent_len, input_emb_dim)
+        :param mask:    input mask, shows x is a word (!=0) or not(==0), shape=(n_samples, max_sent_len)
+        :param C:       context, for encoder is none
+        :param init_h:  initial hidden state
         :param return_sequence: if True, return the encoding at each time, or only return the end state
         :param one_step: only go one step computation, or will be done by theano.scan()
         :param return_gates: whether return the gate state
         :return:
         """
         # recurrent cell only work for tensor
-        if X.ndim == 2:
+        if X.ndim == 2: # X.ndim == 3, shape=(n_samples, max_sent_len, input_emb_dim)
             X = X[:, None, :]
             if mask is not None:
                 mask = mask[:, None]
 
-        # mask
+        # mask, shape=(n_samples, max_sent_len)
         if mask is None:  # sampling or beam-search
             mask = T.alloc(1., X.shape[0], 1)
 
@@ -169,12 +209,14 @@ class GRU(Recurrent):
         if one_step:
             assert init_h, 'previous state must be provided!'
 
+        # reshape the mask to shape=(max_sent_len, n_samples, 1)
         padded_mask = self.get_padded_shuffled_mask(mask, pad=0)
-        X           = X.dimshuffle((1, 0, 2))        # X:   (max_len, nb_samples, input_dim)
+        X           = X.dimshuffle((1, 0, 2))     # X:   (max_sent_len, nb_samples, input_emb_dim)
         # compute the gate values at each time in advance
-        x_z         = dot(X, self.W_z, self.b_z)  # x_z: (max_len, nb_samples, output_dim)
-        x_r         = dot(X, self.W_r, self.b_r)  # x_r: (max_len, nb_samples, output_dim)
-        x_h         = dot(X, self.W_h, self.b_h)  # x_h: (max_len, nb_samples, output_dim)
+        #       shape of W = (input_emb_dim, output_emb_dim)
+        x_z         = dot(X, self.W_z, self.b_z)  # x_z: (max_sent_len, nb_samples, output_emb_dim)
+        x_r         = dot(X, self.W_r, self.b_r)  # x_r: (max_sent_len, nb_samples, output_emb_dim)
+        x_h         = dot(X, self.W_h, self.b_h)  # x_h: (max_sent_len, nb_samples, output_emb_dim)
 
         """
         GRU with constant context. (no attention here.)
@@ -207,8 +249,10 @@ class GRU(Recurrent):
                     non_sequences=[self.U_z, self.U_r, self.U_h]
                 )
 
+            # return hidden state of all times, shape=(nb_samples, max_sent_len, input_emb_dim)
             if return_sequence:
                 return outputs.dimshuffle((1, 0, 2))
+            # hidden state of last time, shape=(nb_samples, output_emb_dim)
             return outputs[-1]
         else:
             if one_step:
