@@ -24,7 +24,6 @@ def get_from_module(identifier, module_params, module_name, instantiate=False, k
 def make_tuple(*args):
     return args
 
-
 def printv(v, prefix=''):
     if type(v) == dict:
         if 'name' in v:

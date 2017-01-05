@@ -1776,8 +1776,11 @@ class NRM(Model):
                 expLoc  = T.repeat(expLoc, code.shape[0], axis=0)
                 code    = T.concatenate([code, expLoc], axis=2)
 
-        logPxz, logPPL     = self.decoder.build_decoder(target, cc_matrix,
-                                                        code, c_mask)
+        # self.decoder.build_decoder(target, cc_matrix, code, c_mask)
+        #       feed target(index vector of target), cc_matrix(copy matrix), code(encoding of source text), c_mask (mask of source text) into decoder, get objective value
+        #       logPxz,logPPL are tensors in [nb_samples,1], cross-entropy and Perplexity of each sample
+        # normal seq2seq
+        logPxz, logPPL     = self.decoder.build_decoder(target, cc_matrix, code, c_mask)
 
         # responding loss
         loss_rec = -logPxz
@@ -2020,6 +2023,7 @@ class NRM(Model):
                     match = None
                     for i in range(len(stemmed_input) - len(target) + 1):
                         match = None
+                        j = 0
                         for j in range(len(target)):
                             if target[j] != stemmed_input[i + j]:
                                 match = False
@@ -2074,6 +2078,7 @@ class NRM(Model):
                     match = None
                     for i in range(len(stemmed_input) - len(predict) + 1):
                         match = None
+                        j = 0
                         for j in range(len(predict)):
                             if predict[j] != stemmed_input[i + j]:
                                 match = False

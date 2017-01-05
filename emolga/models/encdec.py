@@ -505,9 +505,9 @@ class Decoder(Model):
     def _grab_prob(probs, X):
         '''
         return the predicted probabilities of target term
-        :param probs:           [nb_samples, max_len_source, vocab_size]
+        :param probs:           [nb_samples, max_len_target, vocab_size], predicted probabilities of all terms(size=vocab_size) on each target position (size=max_len_target)
         :param X:               [nb_sample, max_len_target], contains the index of target term
-        :return: probs_target:  [nb_sample, max_len_target], predicted probabilities of target term
+        :return: probs_target:  [nb_sample, max_len_target], predicted probabilities of each target term
         '''
         assert probs.ndim == 3
 
@@ -516,10 +516,12 @@ class Decoder(Model):
         vocab_size = probs.shape[2]
         # reshape to a 2D list, axis0 is batch-term, axis1 is vocabulary
         probs = probs.reshape((batch_size * max_len, vocab_size))
-        # return the predicting probability of target term
-        #       T.arange(batch_size * max_len) indicates the index of each prediction
-        #       X.flatten(1), convert X into a 1-D list
-        #       reshape(X.shape), reshape to a normal size
+        '''
+        return the predicting probability of target term
+              T.arange(batch_size * max_len) indicates the index of each prediction
+              X.flatten(1), convert X into a 1-D list, index of target terms
+              reshape(X.shape), reshape to X's shape [nb_sample, max_len_target]
+        '''
         return probs[T.arange(batch_size * max_len), X.flatten(1)].reshape(X.shape)  # advanced indexing
 
     """
@@ -1004,11 +1006,16 @@ class DecoderAtt(Decoder):
             # output after a simple softmax, return a tensor size in [nb_samples, max_len, vocab_size], indicates the probabilities of next (predicted) word
             prob_dist = self.output(readout)  # (nb_samples, max_len, vocab_size)
 
-        #  Cross-entropy!
-        #       target is [nb_sample, max_len_target]. prob_dist is [nb_samples, max_len_source, vocab_size]
-        #       T.log(self._grab_prob(prob_dist, target)) * X_mask, returns
-        #       sum up along axis=1? cross-entropy of each sample? return a tensor in [nb_samples,1]
-        #       [Important] Add value clipping in case of log(0)=-inf. 2016/12/11
+        '''
+        Compute Cross-entropy!
+        1. _grab_prob(prob_dist, target), predicted probabilities of each target term, shape=[nb_sample, max_len_target]
+              prob_dist is [nb_samples, max_len_source, vocab_size], target is [nb_sample, max_len_target]
+        2. T.log(self._grab_prob(prob_dist, target)) * X_mask,
+            to remove the probabilities of padding terms (index=0)
+        3. sum up the log(predicted probability), to get the cross-entropy loss of target sequence (must be less than 0, add a minus to make it possitive, we want the minimize this value to 0)
+        4. return a tensor in [nb_samples,1], overall loss of each sample
+        [Important] Add value clipping in case of log(0)=-inf. 2016/12/11
+        '''
         log_prob = T.sum(T.log(T.clip(self._grab_prob(prob_dist, target), 1e-10, 1.0)) * X_mask, axis=1)
         #  Count is number of terms in each targets
         log_ppl  = log_prob / Count
@@ -1734,7 +1741,7 @@ class NRM(Model):
             # encode text by encoder, return encoded vector at each time (code) and mask showing non-zero elements
             code, _, c_mask, _ = self.encoder.build_encoder(inputs, None, return_sequence=True, return_embed=True)
             # feed target(index vector of target), code(encoding of source text), c_mask (mask of source text) into decoder, get objective value
-            #    logPxz is a tensor in [nb_samples,1], cross-entropy of each sample
+            #    logPxz,logPPL are tensors in [nb_samples,1], cross-entropy and Perplexity of each sample
             logPxz, logPPL     = self.decoder.build_decoder(target, code, c_mask)
 
         # responding loss
@@ -1989,6 +1996,7 @@ class NRM(Model):
                     match = None
                     for i in range(len(stemmed_input) - len(target) + 1):
                         match = None
+                        j = 0
                         for j in range(len(target)):
                             if target[j] != stemmed_input[i + j]:
                                 match = False
@@ -2043,6 +2051,7 @@ class NRM(Model):
                     match = None
                     for i in range(len(stemmed_input) - len(predict) + 1):
                         match = None
+                        j = 0
                         for j in range(len(predict)):
                             if predict[j] != stemmed_input[i + j]:
                                 match = False

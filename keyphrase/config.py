@@ -8,7 +8,7 @@ import os.path as path
 def setup_keyphrase_all():
     config = dict()
     # config['seed']            = 3030029828
-    config['seed']            = 900227
+    config['seed']            = 213248637
     config['task_name']       = 'keyphrase-all.one2one.copy'
     # config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
     config['timemark']        = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
@@ -32,13 +32,14 @@ def setup_keyphrase_all():
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['inspec', 'nus', 'semeval']
+    config['testing_datasets']= ['inspec', 'nus', 'semeval', 'krapivin', 'kdd', 'www', 'umd'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd'
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
-    config['data_process_name'] = 'eos-punctuation-1000validation/'
+    config['data_process_name'] = 'punctuation-20000validation-20000testing/' # 'eos-punctuation-1000validation/'
 
-    config['validation_size'] = 1000
-    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id.pkl'
+    config['validation_size'] = 20000
+    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id_'+str(config['validation_size'])+'.pkl'
+    config['testing_id']      = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'testing_id_'+str(config['validation_size'])+'.pkl'
     config['dataset']         = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_dataset.pkl'
     config['voc']             = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_voc.pkl' # for manual check
 
@@ -47,14 +48,14 @@ def setup_keyphrase_all():
         os.mkdir(config['path_log'])
 
     # trained_model
-    config['trained_model']   = None
+    config['trained_model']   =  None #config['path_experiment'] + '/experiments.keyphrase-all.one2one.copy.id=20170104-043128.epoch=1.batch=3000.pkl'
     # A well-trained model on all data
     #   path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy.<eol><digit>.emb=100.hid=150/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     # A well-trained model on acm data
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     config['weight_json']= config['path_experiment'] + '/model_weight.json'
     config['resume_training'] = False
-    config['training_archive']= None #config['path_experiment'] + '/save_training_status.id=20161229-135001.epoch=1.batch=1000.pkl'
+    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20170104-043128.epoch=1.batch=3000.pkl'
         #config['path_experiment'] + '/save_training_status.pkl'
 
     # # output hdf5 file.
@@ -118,8 +119,8 @@ def setup_keyphrase_all():
     config['decode_unk']      = False
     config['explicit_loc']    = False
 
-    config['max_len']         = 8
-    config['sample_beam']     = 50
+    config['max_len']         = 6
+    config['sample_beam']     = 20
     config['sample_stoch']    = False # use beamsearch
     config['sample_argmax']   = False
 
@@ -178,13 +179,14 @@ def setup_keyphrase_all_testing():
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['inspec', 'nus', 'semeval'] # 'inspec', 'nus', 'semeval'
+    config['testing_datasets']= ['inspec', 'nus', 'semeval', 'krapivin']
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
-    config['data_process_name'] = 'eos-punctuation-1000validation/'
+    config['data_process_name'] = 'punctuation-20000validation-20000testing/'
 
-    config['validation_size'] = 1000
-    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id.pkl'
+    config['validation_size'] = 20000
+    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id_'+config['validation_size']+'.pkl'
+    config['testing_id']      = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'testing_id_'+config['validation_size']+'.pkl'
     config['dataset']         = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_dataset.pkl'
     config['voc']             = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_voc.pkl' # for manual check
 

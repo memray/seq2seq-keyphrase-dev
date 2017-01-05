@@ -1,0 +1,22 @@
+Basic Model Specs
+    bidirectional GRU
+    attention
+    no copy
+    encdec: total number of the parameters of the model: 70,389,000
+    config['enc_embedd_dim']  = 150
+    config['enc_hidden_dim']  = 300
+
+Data Preprocess
+    0. new data, keep all the punctuations, no sentence boundary detection(only one <eos> between title and abstract)
+        #(Training Data before all)=572703
+    1. filter testing data from training data, including 'inspec', 'nus', 'semeval', 'krapivin', 'kdd', 'www', 'umd'
+        #(Training Data after Filtering Test data)=569725
+    2. filter noise data by checking if #(tokens in phrase)/#(letters in phrase)  < 3.5
+        #(Training Data after Filtering Noise)=567088
+    3. keep 20k data for validation and 20k for testing
+        #(Training Data) = 527830
+    Final statistics:
+        Train samples      : 527830
+        Validation samples : 20000
+        Test samples       : 29954
+        Dict size          : 320393

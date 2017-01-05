@@ -31,7 +31,7 @@ def prepare_text(record, tokenize_sentence = True):
         sents = [re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', s) for s in sent_detector.tokenize(text)]
         text = title + ' ' + SENTENCEDELIMITER + ' ' + (' ' + SENTENCEDELIMITER + ' ').join(sents)
     else:
-        text = re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', record['title'] + ' . ' + record['abstract'])
+        text = re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', record['title']) + ' '+SENTENCEDELIMITER + ' ' + re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', record['abstract'])
     return text
 
 def get_tokens(text, type=1):
@@ -73,3 +73,39 @@ def process_keyphrase(record):
     keyphrases = [[w if not re.match('^\d+$', w) else DIGIT for w in phrase] for phrase in keyphrases]
 
     return keyphrases
+
+def build_data(data, idx2word, word2idx):
+    Lmax = len(idx2word)
+
+    # don't keep the original string, or the dataset would be over 2gb
+    # instance = dict(source_str=[], target_str=[], source=[], target=[], target_c=[])
+    instance = dict(source=[], target=[])
+    for count, pair in enumerate(data):
+        source, target = pair
+
+        # if not multi_output:
+        #     A = [word2idx[w] for w in source]
+        #     B = [word2idx[w] for w in target]
+        #     # C = np.asarray([[w == l for w in source] for l in target], dtype='float32')
+        #     C = [0 if w not in source else source.index(w) + Lmax for w in target]
+        # else:
+        A = [word2idx[w] if w in word2idx else word2idx['<unk>'] for w in source]
+        B = [[word2idx[w] if w in word2idx else word2idx['<unk>'] for w in p] for p in target]
+        # C = np.asarray([[w == l for w in source] for l in target], dtype='float32')
+        C = [[0 if w not in source else source.index(w) + Lmax for w in p] for p in target]
+
+        # actually only source,target,target_c are used in model
+        # instance['source_str'] += [source]
+        # instance['target_str'] += [target]
+        instance['source'] += [A]
+        instance['target'] += [B]
+        # instance['target_c'] += [C]
+        # instance['cc_matrix'] += [C]
+        if count % 1000 == 0:
+            print '-------------------- %d ---------------------------' % count
+            print source
+            print target
+            print A
+            print B
+            print C
+    return instance
