@@ -1143,10 +1143,11 @@ class DecoderAtt(Decoder):
 
         # prepare for searching
         Lmax   = self.config['dec_voc_size']
-        sample = []
-        ppp    = []
+        sample = [] # predited sequences
+        ppp    = [] # don't know what's this
         attend = []
-        score  = []
+        score  = [] # probability of predited sequences
+        state = [] # the output encoding of predited sequences
 
         if stochastic:
             score = 0
@@ -1162,7 +1163,7 @@ class DecoderAtt(Decoder):
         # get initial state of decoder RNN with encoding
         #   feed in the encoding of time=0(why 0?! because the X_out of RNN is reverse?), do tanh(W*x+b) and output next_state shape=[1,output_dim]
         #   ss_prob and coverage are zeros[context.shape]
-        previous_state, source_prob, coverage = self.get_init_state(encoding)
+        previous_state, copy_word_prob, coverage = self.get_init_state(encoding)
         # indicator for the first target word (bos target), starts with [-1]
         previous_word = -1 * np.ones((1,)).astype('int32')
 
@@ -1170,6 +1171,15 @@ class DecoderAtt(Decoder):
         if type == 'extractive':
             input = sources[0]
             input_set = set(input)
+            sequence_set = set()
+
+            for i in range(len(input)): # loop over start
+                for j in range(1, maxlen): # loop over length
+                    if i+j > len(input)-1:
+                        break
+                    hash_token = [str(s) for s in input[i:i+j]]
+                    sequence_set.add('-'.join(hash_token))
+            logger.info("Possible n-grams: %d" % len(sequence_set))
 
         # Start searching!
         for ii in xrange(maxlen):
@@ -1206,7 +1216,7 @@ class DecoderAtt(Decoder):
             copy_flag = (np.sum(copy_mask, axis=1, keepdims=True) > 0) # boolean indicates if any copy available
 
             # get the copy probability (eq 6 in paper?)
-            next_a  = source_prob * copy_mask # keep the copied ones
+            next_a  = copy_word_prob * copy_mask # keep the copied ones
             next_a  = next_a / (err + np.sum(next_a, axis=1, keepdims=True)) * copy_flag # normalize
             '''
             Get the probability of next word, sec 3.2 and 3.3
@@ -1246,7 +1256,7 @@ class DecoderAtt(Decoder):
 
                 return temple_prob, source_prob
             # if word in voc, add the copy prob to generative prob and keep generate prob only, else keep the copy prob only
-            voc_prob, source_prob   = merge_()
+            generate_word_prob, copy_word_prob   = merge_()
             next_prob0[:, Lmax:] = 0. # set the latter (copy) part to be zeros
             # print '0', next_prob0[:, 3165]
             # print '01', next_prob[:, 3165]
@@ -1256,13 +1266,13 @@ class DecoderAtt(Decoder):
             if stochastic:
                 # using stochastic sampling (or greedy sampling.)
                 if argmax:
-                    nw = voc_prob[0].argmax()
+                    nw = generate_word_prob[0].argmax()
                     next_word[0] = nw
                 else:
-                    nw = self.rng.multinomial(pvals=voc_prob).argmax(1)
+                    nw = self.rng.multinomial(pvals=generate_word_prob).argmax(1)
 
                 sample.append(nw)
-                score += voc_prob[0, nw]
+                score += generate_word_prob[0, nw]
 
                 if (not fixlen) and (nw == 0):  # sample reached the end
                     break
@@ -1270,14 +1280,14 @@ class DecoderAtt(Decoder):
             else:
                 # using beam-search, keep the top (k-dead_k) results (dead_k is disabled by memray)
                 # we can only computed in a flatten way!
-                cand_scores = hyp_scores[:, None] - np.log(voc_prob + 1e-10) # add a 1e-10 to avoid log(0)
+                cand_scores = hyp_scores[:, None] - np.log(generate_word_prob + 1e-10) # add a 1e-10 to avoid log(0)
                 cand_flat   = cand_scores.flatten()
-                ranks_flat  = cand_flat.argsort()[:(k - dead_k)]
+                ranks_flat  = cand_flat.argsort()[:(k - dead_k)] # get the index of top k predictions
 
                 # fetch the best results.
-                voc_size    = voc_prob.shape[1]
-                trans_index = ranks_flat / voc_size
-                word_index  = ranks_flat % voc_size
+                voc_size    = generate_word_prob.shape[1]
+                sequence_index = ranks_flat / voc_size
+                next_word_index  = ranks_flat % voc_size
                 costs       = cand_flat[ranks_flat]
 
                 # get the new hyp samples
@@ -1289,18 +1299,19 @@ class DecoderAtt(Decoder):
                 new_hyp_coverage = []
                 new_hyp_ss       = []
 
-                for idx, [ti, wi] in enumerate(zip(trans_index, word_index)):
+                for idx, [ti, wi] in enumerate(zip(sequence_index, next_word_index)):
                     new_hyp_samples.append(hyp_samples[ti] + [wi])
                     new_hyp_scores[idx] = copy.copy(costs[idx])
 
                     new_hyp_states.append(copy.copy(next_state[ti]))
                     new_hyp_coverage.append(copy.copy(coverage[ti]))
-                    new_hyp_ss.append(copy.copy(source_prob[ti]))
+                    new_hyp_ss.append(copy.copy(copy_word_prob[ti]))
 
+                    # what's the ppp? generative attention and copy attention?
                     if not return_attend:
-                        new_hyp_ppps.append(hyp_ppps[ti] + [[next_prob0[ti][wi], voc_prob[ti][wi]]])
+                        new_hyp_ppps.append(hyp_ppps[ti] + [[next_prob0[ti][wi], generate_word_prob[ti][wi]]])
                     else:
-                        new_hyp_ppps.append(hyp_ppps[ti] + [(source_prob[ti], alpha[ti])])
+                        new_hyp_ppps.append(hyp_ppps[ti] + [(copy_word_prob[ti], alpha[ti])])
 
                 # check the finished samples
                 new_live_k   = 0
@@ -1318,11 +1329,16 @@ class DecoderAtt(Decoder):
                         sample.append(new_hyp_samples[idx])
                         ppp.append(new_hyp_ppps[idx])
                         score.append(new_hyp_scores[idx])
+                        state.append(new_hyp_states[idx])
                         # dead_k += 1
                     else:
-                        # here I only limit the terms but not require the whole phrase to appear
-                        if type == 'extractive' and new_hyp_samples[idx][-1] not in input_set:
-                            continue
+                        # limit predictions must appear in text
+                        if type == 'extractive':
+                            if new_hyp_samples[idx][-1] not in input_set:
+                                continue
+                            if '-'.join([str(s) for s in new_hyp_samples[idx]]) not in sequence_set:
+                                continue
+
                         new_live_k += 1
                         hyp_samples.append(new_hyp_samples[idx])
                         hyp_ppps.append(new_hyp_ppps[idx])
@@ -1343,10 +1359,10 @@ class DecoderAtt(Decoder):
                 previous_word  = np.array([w[-1] for w in hyp_samples])
                 previous_state = np.array(hyp_states)
                 coverage   = np.array(hyp_coverage)
-                source_prob    = np.array(hyp_ss)
+                copy_word_prob    = np.array(hyp_ss)
                 pass
 
-            print('\t Depth=%d, get %d outputs' % (ii, len(sample)))
+            logger.info('\t Depth=%d, get %d outputs' % (ii, len(sample)))
 
         # end.
         if not stochastic:
@@ -1356,12 +1372,13 @@ class DecoderAtt(Decoder):
                     sample.append(hyp_samples[idx])
                     ppp.append(hyp_ppps[idx])
                     score.append(hyp_scores[idx])
+                    state.append(hyp_states[idx])
 
         # sort the result
-        result = zip(sample, score, ppp)
+        result = zip(sample, score, ppp, state)
         sorted_result = sorted(result, key=lambda entry: entry[1], reverse=False)
-        sample, score, ppp = zip(*sorted_result)
-        return sample, score, ppp
+        sample, score, ppp, state = zip(*sorted_result)
+        return sample, score, ppp, state
 
 
 class FnnDecoder(Model):
@@ -1855,7 +1872,7 @@ class NRM(Model):
                 expLoc  = np.repeat(expLoc, context.shape[0], axis=0)
                 context = np.concatenate([context, expLoc], axis=2)
 
-        sample, score, ppp    = self.decoder.get_sample(context, c_mask, inputs, **args)
+        sample, score, ppp, _    = self.decoder.get_sample(context, c_mask, inputs, **args)
         if return_all:
             return sample, score, ppp
 
@@ -1916,7 +1933,7 @@ class NRM(Model):
                 expLoc  = np.repeat(expLoc, context.shape[0], axis=0)
                 context = np.concatenate([context, expLoc], axis=2)
 
-        sample, score, ppp    = self.decoder.get_sample(context, c_mask, inputs, **args)
+        sample, score, ppp, _    = self.decoder.get_sample(context, c_mask, inputs, **args)
         if return_all:
             return sample, score
 

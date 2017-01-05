@@ -888,7 +888,13 @@ class DecoderAtt(Decoder):
         """
         Build the decoder for evaluation
 
-        the X here is the target of time t-1, and used as input of time t for training
+        We have padded the last column of target (target[-1]) to be 0s
+        The Y and Y_mask here are embedding and mask of target.
+
+        Here for training purpose, we create a new input X and X_mask,
+                in which pad one column of 0s at the beginning as start signal, and delete the last column of 0s
+
+        self.config['use_input']: True, if False, may mean that don't input the current word, only h_t = g(h_t-1)+h(0)
         :return X:              a matrix of 0s [nb_sample, 1, enc_embedd_dim], concatenate with Y [nb_sample, max_len-1, enc_embedd_dim]
                                 result in [nb_sample, [0]+Y[:-1], enc_embedd_dim], first one is 0, and latter one is y[t-1]
         :return X_mask:         a matrix of 1s [nb_sample, 1],  concatenate with Y_mask [nb_sample, max_len-1]
@@ -974,13 +980,13 @@ class DecoderAtt(Decoder):
         if self.dropout > 0:
             readout = self.D(readout, train=train)
 
-        # don't what's this
+        # don't know what's this
         #   take another linear layer context_readout, return [nb_sample, 1]
         if self.config['context_predict']:
             readin  += [Ctx]
             readout += self.context_readout(Ctx)
 
-        # don't what's this
+        # don't know what's this
         #   another linear layer prev_word_readout, return [nb_sample, 1]
         if self.config['bigram_predict']:
             readin  += [X]
@@ -1017,6 +1023,123 @@ class DecoderAtt(Decoder):
             return log_prob, Count
         else:
             return log_prob, log_ppl
+
+
+    def build_representer(self,
+                      target,
+                      context, c_mask,
+                      train=True):
+        """
+        Very similar to build_decoder, but instead of return cross-entropy of generating target sequences,
+            we return the probability of generating target sequences (similar to _step_sample)
+        :param target:              index vector of target   [nb_sample, max_len]
+        :param context:             encoding of source text, [nb_sample, max_len, 2*enc_hidden_dim]
+        :param last_words:          the index of the last word in target
+
+        :return prob_dist:          probability of generating target sequences, size=TODO
+        :return final_state:        decode vector of generating target sequences, size=TODO
+        """
+        assert context.ndim == 3, 'context must have 3 dimentions.'
+        # context: (nb_samples, max_len, contxt_dim)
+
+        # prepare the inputs
+        #      X                :  embedding of targets, padded first word as 0 [nb_sample, max_len, enc_embedd_dim]
+        #      X_mask           :  mask of targets, padded first word as 0      [nb_sample, max_len]
+        #      Y,Y_mask,Count   :  not used
+        X, X_mask, _, _, _ = self.prepare_xy(target, context)
+
+        # input drop-out if any.
+        if self.dropout > 0:
+            X     = self.D(X, train=train)
+
+        # Initial state of RNN
+        Init_h  = self.Initializer(context[:, 0, :])  # time 0 of each sequence embedding
+        X       = X.dimshuffle((1, 0, 2))   # shuffle to [max_len_target, nb_sample, enc_hidden_dim]
+        X_mask  = X_mask.dimshuffle((1, 0)) # shuffle to [max_len_target, nb_sample]
+
+        def _recurrence(x, x_mask, prev_h, source_context, cm):
+            '''
+
+            :param x:       word embedding of current target word[nb_sample, enc_hidden_dim]
+            :param x_mask:  mask of target [nb_sample]
+            :param prev_h:  hidden state of previous time t-1
+            :param source_context:      encoding vector of source
+            :param cm:      mask of source
+            :return: x_out: decoding vector after time t
+            :return: prob:  attention probability
+            :return: c:     context vector after attention
+            '''
+            # compute the attention
+            attention_prob  = self.attention_reader(prev_h, source_context, Smask=cm)
+            # get the context vector after attention by context * atten_prob
+            c     = T.sum(source_context * attention_prob[:, :, None], axis=1)
+            # get the RNN output vector of this step
+            x_out = self.RNN(x, mask=x_mask, C=c, init_h=prev_h, one_step=True)
+            # return RNN output, attention prob and attentioned context
+            #    x_out is used as the prev_h of next iteration
+            return x_out, attention_prob, c
+
+        # return the outputs of _recurrence, update is ignored (the _)
+        outputs, _ = theano.scan(
+            _recurrence,
+            sequences=[X, X_mask],
+            outputs_info=[Init_h, None, None],
+            non_sequences=[context, c_mask],
+            name='decoder_scan'
+        )
+
+        # X_out is the decoding output [nb_sample, max_len_target, dec_hidden_dim]
+        X_out, Probs, Ctx = [z.dimshuffle((1, 0, 2)) for z in outputs] # shuffle to [nb_sample, max_len_target, dec_hidden_dim]
+
+        # we are only interested in the states at final, reshape to [nb_sample, dec_hidden_dim]
+        final_state = X_out[ :, -1, :]
+        Ctx         = Ctx[ :, -1, :]
+
+        # return to normal size.
+        X       = X.dimshuffle((1, 0, 2)) # shuffle back to [nb_sample, max_len_target, 2*enc_hidden_dim]
+        X       = X[ :, -1, :]
+        X_mask  = X_mask.dimshuffle((1, 0)) # shuffle back to [nb_sample, max_len_target]
+
+        # Readout
+        readin  = [final_state] # RNN output at each time t
+        # a linear activation layer, take input size=[nb_sample, max_len_target, dec_hidden_dim], output size=[nb_sample, max_len_target, dec_voc_size]
+        #   just return W*X+b [nb_sample, max_len_target, dec_voc_size]
+        readout = self.hidden_readout(final_state)
+
+        if self.dropout > 0:
+            readout = self.D(readout, train=train)
+
+        # don't know what's this
+        #   take another linear layer context_readout, return [nb_sample, 1]
+        if self.config['context_predict']:
+            readin  += [Ctx]
+            readout += self.context_readout(Ctx)
+
+        # don't know what's this
+        #   another linear layer prev_word_readout, return [nb_sample, 1]
+        if self.config['bigram_predict']:
+            readin  += [X]
+            readout += self.prev_word_readout(X)
+
+        # only have non-linear for maxout, so not work here
+        for l in self.output_nonlinear:
+            readout = l(readout)
+
+        if self.copynet:
+            readin  = T.concatenate(readin, axis=-1)
+            key     = self.Os(readin)
+
+            # (nb_samples, max_len_T, embed_size) :: key
+            # (nb_samples, max_len_S, embed_size) :: context
+            Eng     = T.sum(key[:, :, None, :] * context[:, None, :, :], axis=-1)
+            # (nb_samples, max_len_T, max_len_S)  :: Eng
+            EngSum  = logSumExp(Eng, axis=2, mask=c_mask[:, None, :], c=readout)
+            prob_dist = T.concatenate([T.exp(readout - EngSum), T.exp(Eng - EngSum) * c_mask[:, None, :]], axis=-1)
+        else:
+            # output after a simple softmax, return a tensor size in [nb_samples, max_len, vocab_size], indicates the probabilities of next (predicted) word
+            prob_dist = self.output(readout)  # (nb_samples, vocab_size)
+
+        return prob_dist, final_state
 
 
     def _step_sample(self, prev_word, prev_stat, context, c_mask):
@@ -1130,7 +1253,7 @@ class DecoderAtt(Decoder):
         Generate samples, either with stochastic sampling or beam-search!
         both inputs and context contain multiple sentences, so could this function generate sequence with regard to each input spontaneously?
         :param inputs: the source text, used for extraction
-        :param encoding: the encoding of input sequence on each word, shape=len(sent)*(2*D), 2*D is due to bidirectional
+        :param encoding: the encoding of input sequence on each word, shape=[len(sent),2*D], 2*D is due to bidirectional
         :param c_mask: whether x in input is not zero (is padding)
         :param k: config['sample_beam']
         :param maxlen: config['max_len']
@@ -1148,9 +1271,9 @@ class DecoderAtt(Decoder):
         #     assert k == 1
 
         # prepare for searching
-        predicted = {}
-        # sample = []
-        # score = []
+        sample = []
+        score  = []
+        state  = []
 
         # if stochastic:
         #     score = 0
@@ -1164,15 +1287,23 @@ class DecoderAtt(Decoder):
         hyp_states = []
 
         # get initial state of decoder RNN with context, size = 1*D
-        next_state = self.get_init_state(encoding)
+        previous_state = self.get_init_state(encoding)
         # indicator for the first target word (bos target). Why it's [-1]?
-        next_word = -1 * np.ones((1,)).astype('int32')
+        previous_word = -1 * np.ones((1,)).astype('int32')
 
         # if aim is extractive, then set the initial beam size to be voc_size
         if type == 'extractive':
-            k = self.config['voc_size']
             input = inputs[0]
             input_set = set(input)
+            sequence_set = set()
+
+            for i in range(len(input)): # loop over start
+                for j in range(1, maxlen): # loop over length
+                    if i+j > len(input)-1:
+                        break
+                    hash_token = [str(s) for s in input[i:i+j]]
+                    sequence_set.add('-'.join(hash_token))
+            logger.info("Possible n-grams: %d" % len(sequence_set))
 
         # Start searching!
         for ii in xrange(maxlen):
@@ -1180,9 +1311,20 @@ class DecoderAtt(Decoder):
             # make live_k copies of context and c_mask, to predict next word at once
             encoding_copies    = np.tile(encoding, [live_k, 1, 1])
             c_mask_copies      = np.tile(c_mask, [live_k, 1])
-            # based on the live_k alive prediction, predict the next word of them at a time. Return live_k groups of results (next_prob, next_word, next_state)
+            '''
+            based on the live_k alive prediction, predict the next word of them at a time.
+            Inputs:
+                previous_word:      a list of index of last word, size=[live_k]
+                previous_state:     decoding vector of time t-1, size= [live_k, dec_hidden_dim]
+                encoding_copies:    encoding of source, size=[live_k, len_source, 2*enc_hidden_dim]
+                c_mask_copies:      mask of source ,    size=[live_k, len_source]
+            Return live_k groups of results (next_prob, next_word, next_state)
+                next_prob is [live_k, voc_size], contains the probabilities of predicted next word.
+                next_word is a list of [live_k] given by = self.rng.multinomial(pvals=next_prob).argmax(1), not useful for beam-search.
+                next_state is the current hidden state of decoder, size=[live_k, dec_hidden_dim]
+            '''
             next_prob, next_word, next_state \
-                = self.sample_next(next_word, next_state, encoding_copies, c_mask_copies) # next_prob is live_k*Voc_size, contains the probabilities of predicted next word. next_word is a list of 1*live_k given by = self.rng.multinomial(pvals=next_prob).argmax(1), not useful for beam-search. next_state is the current hidden state of decoder, size=live_k*D
+                = self.sample_next(previous_word, previous_state, encoding_copies, c_mask_copies)
 
             if stochastic:
                 # using stochastic sampling (or greedy sampling.)
@@ -1207,17 +1349,17 @@ class DecoderAtt(Decoder):
                 ranks_flat = cand_flat.argsort()[:(k - dead_k)] # get the (global) top k prediction words
 
                 # fetch the best results. Get the index of best predictions. trans_index is the index of its previous word, word_index is the index of prediction
-                voc_size = next_prob.shape[1]
-                trans_index = ranks_flat / voc_size
-                word_index = ranks_flat % voc_size
-                costs = cand_flat[ranks_flat]
+                voc_size                = next_prob.shape[1]
+                previous_sequence_index = ranks_flat / voc_size
+                next_word_index         = ranks_flat % voc_size
+                costs                   = cand_flat[ranks_flat]
 
                 # get the new hyp samples
                 new_hyp_samples = []
                 new_hyp_scores = np.zeros(k - dead_k).astype(theano.config.floatX)
                 new_hyp_states = []
                 # enumerate (last word, predicted word), store corresponding: 1. new_hyp_samples: current sequence; 2.new_hyp_scores: current score (probability); 3. new_hyp_states: the hidden state
-                for idx, [ti, wi] in enumerate(zip(trans_index, word_index)):
+                for idx, [ti, wi] in enumerate(zip(previous_sequence_index, next_word_index)):
                     new_hyp_samples.append(hyp_samples[ti] + [wi])
                     new_hyp_scores[idx] = copy.copy(costs[idx])
                     new_hyp_states.append(copy.copy(next_state[ti]))
@@ -1229,64 +1371,36 @@ class DecoderAtt(Decoder):
                 hyp_states = []
                 # check all the predictions
                 for idx in xrange(len(new_hyp_samples)):
-                    if type == 'extractive':
-                        '''
-                        only predict the subsequences that appear in the original text
-                        actually not all the n-grams will be included
-                        as only after predicting a <eol> , this prediction will be put into final results
-                        '''
-                        if (new_hyp_samples[idx][-1] == 0) and (not fixlen): # bug??? why new_hyp_states[idx][-1] == 0? I think it should be new_hyp_samples[idx][-1] == 0
-                            # if the predicted words is <eol>(reach the end), add to final list
-                            # sample.append(new_hyp_samples[idx])
-                            # score.append(new_hyp_scores[idx])
+                    if (new_hyp_samples[idx][-1] == 0) and (not fixlen): # bug??? why new_hyp_states[idx][-1] == 0? I think it should be new_hyp_samples[idx][-1] == 0
+                        # if the predicted words is <eol>(reach the end), add to final list
+                        # sample.append(new_hyp_samples[idx])
+                        # score.append(new_hyp_scores[idx])
 
-                            # disable the dead_k to extend the prediction
-                            # dead_k += 1
-
-                            # add to dict to avoid duplicate prediction
-                            key = '-'.join([str(t) for t in new_hyp_samples[idx]])
-                            if key not in predicted:
-                                predicted[key] = (new_hyp_samples[idx], new_hyp_scores[idx])
-                            elif new_hyp_scores[idx] > predicted[key]:
-                                predicted[key] = (new_hyp_samples[idx], new_hyp_scores[idx])
-                        else:
-                            # not end, check whether current new_hyp_samples[idx] is in original text,
-                            # if yes, add the queue for predicting next round
-                            # if no, discard
+                        # disable the dead_k to extend the prediction
+                        # dead_k += 1
+                        sample.append(new_hyp_samples[idx])
+                        score.append(new_hyp_scores[idx])
+                        state.append(new_hyp_states[idx])
+                    else:
+                        # not end, check whether current new_hyp_samples[idx] is in original text,
+                        # if yes, add the queue for predicting next round
+                        # if no, discard
+                        # limit predictions must appear in text
+                        if type == 'extractive':
+                            '''
+                            only predict the subsequences that appear in the original text
+                            actually not all the n-grams will be included
+                            as only after predicting a <eol> , this prediction will be put into final results
+                            '''
                             if new_hyp_samples[idx][-1] not in input_set:
                                 continue
-                            for i in range(len(input) - len(new_hyp_samples[idx]) + 1):
-                                match = True
-                                for j in range(len(new_hyp_samples[idx])):
-                                    if new_hyp_samples[idx][j] != input[i+j]:
-                                        match = False
-                                        break
-                                if match:
-                                    new_live_k += 1
-                                    hyp_samples.append(new_hyp_samples[idx])
-                                    hyp_scores.append(new_hyp_scores[idx])
-                                    hyp_states.append(new_hyp_states[idx])
-                                    break
-                    if type == 'generative':
-                        '''
-                        normal generative prediction via beam-search
-                        '''
-                        if (new_hyp_samples[idx][-1] == 0) and (not fixlen):
-                            # if the predicted words is <eol>(reach the end), add to final list
-                            # disable the dead_k to extend the prediction
-                            # dead_k += 1
+                            if '-'.join([str(s) for s in new_hyp_samples[idx]]) not in sequence_set:
+                                continue
 
-                            # add to dict to avoid duplicate prediction
-                            key = '-'.join([str(t) for t in new_hyp_samples[idx]])
-                            if key not in predicted:
-                                predicted[key] = (new_hyp_samples[idx], new_hyp_scores[idx])
-                            elif new_hyp_scores[idx] > predicted[key]:
-                                predicted[key] = (new_hyp_samples[idx], new_hyp_scores[idx])
-                        else:
-                            new_live_k += 1
-                            hyp_samples.append(new_hyp_samples[idx])
-                            hyp_scores.append(new_hyp_scores[idx])
-                            hyp_states.append(new_hyp_states[idx])
+                        new_live_k += 1
+                        hyp_samples.append(new_hyp_samples[idx])
+                        hyp_scores.append(new_hyp_scores[idx])
+                        hyp_states.append(new_hyp_states[idx])
 
                 hyp_scores = np.array(hyp_scores)
                 live_k = new_live_k
@@ -1296,10 +1410,13 @@ class DecoderAtt(Decoder):
                     break
                 # if dead_k >= k:
                 #     break
-                # set the predicted word and hidden_state as the next_word and next_state
-                next_word = np.array([w[-1] for w in hyp_samples])
-                next_state = np.array(hyp_states)
-                pass
+
+                '''
+                set the predicted word and hidden_state as the next_word and next_state
+                '''
+                previous_word = np.array([w[-1] for w in hyp_samples])
+                previous_state = np.array(hyp_states)
+
             pass
 
         # end.
@@ -1307,27 +1424,16 @@ class DecoderAtt(Decoder):
             # dump every remaining one
             if live_k > 0:
                 for idx in xrange(live_k):
-                    # sample.append(hyp_samples[idx])
-                    # score.append(hyp_scores[idx])
-                    key = '-'.join([str(t) for t in hyp_samples[idx]])
-                    if key not in predicted:
-                        predicted[key] = (hyp_samples[idx], hyp_scores[idx])
-                    elif hyp_scores[idx] > predicted[key]:
-                        predicted[key] = (hyp_samples[idx], hyp_scores[idx])
+                    sample.append(hyp_samples[idx])
+                    score.append(hyp_scores[idx])
+                    state.append(hyp_states[idx])
 
-        # print(predicted)
-        # sort the result in descent order (the lower score, the higher probability, the better result)
-        sorted_list = sorted(predicted.values(), key=lambda entry: entry[1], reverse=False)
-        # print('Predicted %d results' % len(sorted_list))
-        # print(sorted_list)
+        # sort the result
+        result = zip(sample, score, state)
+        sorted_result = sorted(result, key=lambda entry: entry[1], reverse=False)
+        sample, score, state = zip(*sorted_result)
+        return sample, score, state
 
-        sample = []
-        score = []
-        for i in range(len(sorted_list)):
-            sample.append(sorted_list[i][0])
-            score.append(sorted_list[i][1])
-
-        return sample, score
 
 
 class FnnDecoder(Model):
@@ -1736,6 +1842,8 @@ class NRM(Model):
             # feed target(index vector of target), code(encoding of source text), c_mask (mask of source text) into decoder, get objective value
             #    logPxz is a tensor in [nb_samples,1], cross-entropy of each sample
             logPxz, logPPL     = self.decoder.build_decoder(target, code, c_mask)
+            prob, stat         = self.decoder.build_representer(target, code, c_mask)
+
 
         # responding loss
         loss_rec = T.mean(-logPxz) # get the mean of cross-entropy of this batch
@@ -1765,6 +1873,13 @@ class NRM(Model):
                                       [loss_rec, loss_ppl],
                                       name='validate_fun',
                                       allow_input_downcast=True)
+
+        self.represent_ = theano.function(train_inputs,
+                                      [prob, stat],
+                                      name='represent_fun',
+                                      allow_input_downcast=True
+                                      )
+
 
         logger.info("training functions compile done.")
 
@@ -1841,12 +1956,12 @@ class NRM(Model):
             # get the encoding of the inputs
             context = self.encoder.encode(inputs)
             # generate outputs
-            sample, score = self.decoder.get_sample(context, inputs, **args)
+            sample, score, _ = self.decoder.get_sample(context, inputs, **args)
         else:
             # context: input sentence embedding
             # c_mask:  whether x in input is not zero (is padding)
             context, _, c_mask, _ = self.encoder.encode(inputs)
-            sample, score = self.decoder.get_sample(context, c_mask, inputs, **args)
+            sample, score, _ = self.decoder.get_sample(context, c_mask, inputs, **args)
 
         if return_all:
             return sample, score
