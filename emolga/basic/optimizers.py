@@ -202,16 +202,24 @@ class Adam(Optimizer):  # new Adam is designed for our purpose.
         We add Gaussian Noise to improve the performance.
     '''
     def __init__(self, lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=1e-8, save=False, rng=None, *args, **kwargs):
+        print('args=%s' % str(args))
+        print('kwargs=%s' % str(kwargs))
         super(Adam, self).__init__(**kwargs)
         self.__dict__.update(locals())
         print locals()
 
-        self.iterations = shared_scalar(0,  name='iteration')
+        # if 'iterations' in kwargs:
+        #     print('iterations=%s' % str(kwargs['iterations']))
+        #     self.iterations = shared_scalar(kwargs['iterations'],  name='iteration')
+        # else:
+        #     print('iterations not set')
+        #     self.iterations = shared_scalar(0,  name='iteration')
+        self.iterations = shared_scalar(0, name='iteration')
         self.lr         = shared_scalar(lr, name='lr')
-        self.rng        = MRG_RandomStreams(use_cuda=True)
+        # self.rng        = MRG_RandomStreams(use_cuda=True)
         self.noise      = []
         self.forget     = dict()
-        self.rng        = rng
+        # self.rng        = rng
         self.beta_1     = beta_1
         self.beta_2     = beta_2
         self.epsilon    = epsilon
@@ -272,16 +280,18 @@ class Adam(Optimizer):  # new Adam is designed for our purpose.
         return self.updates
 
     def get_config(self):
-        print(theano.tensor.cast(self.lr, dtype='float32').eval())
-        print(theano.tensor.cast(self.iterations, dtype='int32').eval())
+        # print(theano.tensor.cast(self.lr, dtype='float32').eval())
+        # print(int(theano.tensor.cast(self.iterations, dtype='int32').eval()))
         config = {'lr':     float(theano.tensor.cast(self.lr, dtype='float32').eval()),
                   'beta_1': float(self.beta_1),
                   'beta_2': float(self.beta_2),
-                  'iteration':  theano.tensor.cast(self.iterations, dtype='int32').eval(),
+                  'iterations':  int(theano.tensor.cast(self.iterations, dtype='int32').eval()),
                   'noise':  self.noise
                   }
         base_config = super(Adam, self).get_config()
-        return dict(list(base_config.items()) + list(config.items()))
+        return_config = dict(list(base_config.items()) + list(config.items()))
+        print('Getting config of optimizer: \n\t\t %s' % str(return_config))
+        return return_config
 
 # aliases
 sgd = SGD

@@ -48,8 +48,9 @@ def setup_keyphrase_all():
 
     config['data_process_name'] = 'eos-punctuation-1000validation/'
 
-    config['validation_size'] = 1000
-    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id.pkl'
+    config['validation_size'] = 20000
+    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id_'+str(config['validation_size'])+'.pkl'
+    config['testing_id']      = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'testing_id_'+str(config['validation_size'])+'.pkl'
     config['dataset']         = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_dataset.pkl'
     config['voc']             = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_voc.pkl' # for manual check
 
@@ -176,7 +177,7 @@ def setup_keyphrase_all_testing():
     config = dict()
     # config['seed']            = 3030029828
     config['seed']            = 19900226
-    config['task_name']       = 'keyphrase-all.one2one.nocopy'
+    config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
     # config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
     config['timemark']        = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
 
@@ -215,14 +216,14 @@ def setup_keyphrase_all_testing():
         os.mkdir(config['path_log'])
 
     # trained_model
-    config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.nocopy.id=20161230-000056.epoch=3.batch=1000.pkl'
+    config['trained_model']   = config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
     # A well-trained model on all data
     #   path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy.<eol><digit>.emb=100.hid=150/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     # A well-trained model on acm data
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     config['weight_json']= config['path_experiment'] + '/model_weight.json'
     config['resume_training'] = False
-    config['training_archive']= None
+    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20161220-070035.epoch=2.batch=20000.pkl'
         #config['path_experiment'] + '/save_training_status.pkl'
 
     # # output hdf5 file.
@@ -255,7 +256,7 @@ def setup_keyphrase_all_testing():
                                 else 2 * config['enc_hidden_dim']
 
     # Decoder: CopyNet
-    config['copynet']         = False
+    config['copynet']         = True
     config['identity']        = False
     config['location_embed']  = True
     config['coverage']        = True
@@ -293,7 +294,7 @@ def setup_keyphrase_all_testing():
 
     config['predict_type']    = 'extractive' # type of prediction, extractive or generative
     config['predict_path']    = config['path_experiment'] + '/predict.' + config['timemark']+ '/'
-                                # config['path_experiment'] + '/predict.20161230-145652.len=6.beam=100/'
+                                # config['path_experiment'] + '/predict.20161230-145652/'
                                 # config['path_experiment'] + '/predict.' + config['timemark']+ '/'
 
     if not os.path.exists(config['predict_path']):
