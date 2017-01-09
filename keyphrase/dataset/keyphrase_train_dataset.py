@@ -10,54 +10,10 @@ import re
 
 from keyphrase.config import *
 from emolga.dataset.build_dataset import *
-from keyphrase.dataset import data_utils
-from keyphrase_test_dataset import DataLoader,load_testing_data
-import data_utils as utils
+from keyphrase.dataset import dataset_utils
+from keyphrase_test_dataset import DataLoader,testing_data_loader
+import dataset_utils as utils
 
-
-wordfreq = dict()
-
-def load_pairs(records, filter=False):
-    global wordfreq
-    filtered_records = []
-    pairs = []
-
-    for id, record in enumerate(records):
-        text        = utils.prepare_text(record, tokenize_sentence = False)
-        tokens      = utils.get_tokens(text)
-        keyphrases  = utils.process_keyphrase(record)
-
-        for w in tokens:
-            if w not in wordfreq:
-                wordfreq[w]  = 1
-            else:
-                wordfreq[w] += 1
-
-        for keyphrase in keyphrases:
-            for w in keyphrase:
-                if w not in wordfreq:
-                    wordfreq[w]  = 1
-                else:
-                    wordfreq[w] += 1
-
-        if id % 10000 == 0:
-            print('%d \n\t%s \n\t%s \n\t%s' % (id, text, tokens, keyphrases))
-
-        if sum([len(k) for k in keyphrases]) != 0:
-            ratio = float(len(record['keyword'])) / float(sum([len(k) for k in keyphrases]))
-        else:
-            ratio = 0
-        if ( filter and ratio < 3.5 ): # usually < 4.5 is noice
-            print('!' * 100)
-            print('Error found')
-            print('%d - title=%s, \n\ttext=%s, \n\tkeyphrase=%s \n\tkeyphrase after process=%s \n\tlen(keyphrase)=%d, #(tokens in keyphrase)=%d \n\tratio=%.3f' % (
-            id, record['title'], record['abstract'], record['keyword'], keyphrases, len(record['keyword']), sum([len(k) for k in keyphrases]), ratio))
-            continue
-
-        pairs.append((tokens, keyphrases))
-        filtered_records.append(record)
-
-    return filtered_records, pairs
 
 def build_dict(wordfreq):
     word2idx = dict()
@@ -87,8 +43,6 @@ def load_data_and_dict(training_dataset):
     :param training_dataset,testing_dataset: path
     :return:
     '''
-    global wordfreq
-
     # load training dataset
     print('Loading training dataset')
     f                   = open(training_dataset, 'r')
@@ -106,7 +60,7 @@ def load_data_and_dict(training_dataset):
     for dataset_name in testing_names:
         print(dataset_name)
 
-        testing_records[dataset_name] = load_testing_data(dataset_name, kwargs=dict(basedir = config['path'])).get_docs()
+        testing_records[dataset_name] = testing_data_loader(dataset_name, kwargs=dict(basedir = config['path'])).get_docs()
 
         for r in testing_records[dataset_name]:
             title = r['title'].strip().lower()
@@ -115,7 +69,7 @@ def load_data_and_dict(training_dataset):
 
 
     print('Process the data')
-    training_records, train_pairs         = load_pairs(title_dict.values(), filter=True)
+    training_records, train_pairs, wordfreq         = load_pairs(title_dict.values(), filter=True)
     print('#(Training Data after Filtering Noises)=%d' % len(training_records))
 
     print('Preparing development data')
@@ -159,9 +113,9 @@ def load_data_and_dict(training_dataset):
     # use character-based model [on]
     # use word-based model     [off]
     print('Mapping tokens to indexes')
-    train_set           = data_utils.build_data(train_pairs, idx2word, word2idx)
-    validation_set      = data_utils.build_data(validation_pairs, idx2word, word2idx)
-    test_set            = dict([(k, data_utils.build_data(v, idx2word, word2idx)) for (k,v) in test_pairs.items()])
+    train_set           = dataset_utils.build_data(train_pairs, idx2word, word2idx)
+    validation_set      = dataset_utils.build_data(validation_pairs, idx2word, word2idx)
+    test_set            = dict([(k, dataset_utils.build_data(v, idx2word, word2idx)) for (k, v) in test_pairs.items()])
 
     print('Train samples      : %d' % len(train_pairs))
     print('Validation samples : %d' % len(validation_pairs))

@@ -4,6 +4,8 @@ import logging
 from nltk.stem.porter import *
 import numpy as np
 
+from dataset import dataset_utils
+
 logger = logging.getLogger(__name__)
 
 
@@ -15,9 +17,9 @@ def cut_zero(sample, idx2word):
     return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample[:sample.index(0)]]
 
 
-def evaluate_multiple(config, inputs, outputs,
+def evaluate_multiple(config, test_set, inputs, outputs,
                       original_input, original_outputs,
-                      samples, scores, idx2word):
+                      samples, scores, idx2word, do_stem):
     '''
     inputs_unk is same as inputs except for filtered out all the low-freq words to 1 (<unk>)
     return the top few keywords, number is set in config
@@ -42,7 +44,10 @@ def evaluate_multiple(config, inputs, outputs,
     with open(config['path'] + '/dataset/stopword/stopword_en.txt') as stopword_file:
         stopword_set = set([stemmer.stem(w.strip()) for w in stopword_file])
 
-    for input_sentence, target_list, predict_list, score_list in zip(inputs, original_outputs, samples, scores):
+    postag_lists = [[s[1] for s in d] for d in test_set['tagged_source']]
+    # for input_sentence, target_list, predict_list, score_list in zip(inputs, original_outputs, samples, scores):
+    for source_str, input_sentence, target_list, predict_list, score_list, postag_list in zip(test_set['source_str'], inputs, test_set['target_str'], samples, scores, postag_lists):
+
         '''
         enumerate each document, process target/predict/score and measure via p/r/f1
         '''
@@ -57,8 +62,10 @@ def evaluate_multiple(config, inputs, outputs,
 
         # convert target index into string
         for target in target_list:
-            target = cut_zero(target, idx2word)
-            target = [stemmer.stem(w) for w in target]
+            # target = cut_zero(target, idx2word)
+            if do_stem:
+                target = [stemmer.stem(w) for w in target]
+            print(target)
 
             keep = True
             # whether do filtering on groundtruth phrases. if config['target_filter']==None, do nothing
@@ -92,6 +99,12 @@ def evaluate_multiple(config, inputs, outputs,
                 continue
 
             target_outputs.append(target)
+
+        # check if prediction is noun-phrase, initialize a filter. Be sure this should be after stemming
+        if config['noun_phrase_only']:
+            stemmed_source = [stemmer.stem(w) for w in source_str]
+            noun_phrases = dataset_utils.get_none_phrases(stemmed_source, postag_list, config['max_len'])
+            noun_phrase_set = set([' '.join(p[0]) for p in noun_phrases])
 
         # convert predict index into string
         for id, (predict, score) in enumerate(zip(predict_list, score_list)):
@@ -160,6 +173,12 @@ def evaluate_multiple(config, inputs, outputs,
                 keep = False
                 # print('\t\tall letters! - %s' % str(predict))
 
+            # check if prediction is noun-phrase
+            if config['noun_phrase_only']:
+                if ' '.join(predict) not in noun_phrase_set:
+                    print('Not a NP: %s' % (' '.join(predict)))
+                    keep = False
+
             # discard invalid ones
             if not keep:
                 continue
@@ -226,6 +245,10 @@ def evaluate_multiple(config, inputs, outputs,
         Compute micro metrics
         '''
         for number_to_predict in [5, 10, 15]:
+            metric_dict['appear_target_number'] = len(target_outputs)
+            metric_dict['target_number'] = len(target_list)
+            metric_dict['correct_number@%d' % number_to_predict] = sum(correctly_matched[:number_to_predict])
+
             metric_dict['p@%d' % number_to_predict] = float(sum(correctly_matched[:number_to_predict])) / float(
                 number_to_predict)
 
@@ -241,10 +264,6 @@ def evaluate_multiple(config, inputs, outputs,
                     metric_dict['p@%d' % number_to_predict] + metric_dict['r@%d' % number_to_predict])
             else:
                 metric_dict['f1@%d' % number_to_predict] = 0
-
-            metric_dict['valid_target_number'] = len(target_outputs)
-            metric_dict['target_number'] = len(target_list)
-            metric_dict['correct_number@%d' % number_to_predict] = sum(correctly_matched[:number_to_predict])
 
             # Compute the binary preference measure (Bpref)
             bpref = 0.
@@ -324,7 +343,7 @@ def evaluate_multiple(config, inputs, outputs,
     overall_score = {}
     for k in [5, 10, 15]:
         correct_number = sum([m['correct_number@%d' % k] for m in micro_metrics])
-        valid_target_number = sum([m['valid_target_number'] for m in micro_metrics])
+        appear_target_number = sum([m['appear_target_number'] for m in micro_metrics])
         target_number = sum([m['target_number'] for m in micro_metrics])
 
         # Compute the Micro Measures, by averaging the micro-score of each prediction
@@ -334,7 +353,7 @@ def evaluate_multiple(config, inputs, outputs,
 
         output_str = 'Overall - %s valid testing data=%d, Number of Target=%d/%d, Number of Prediction=%d, Number of Correct=%d' % (
                     config['predict_type'], real_test_size,
-                    valid_target_number, target_number,
+                    appear_target_number, target_number,
                     real_test_size * k, correct_number
         )
         outs.append(output_str+'\n')
@@ -349,7 +368,7 @@ def evaluate_multiple(config, inputs, outputs,
 
         # Compute the Macro Measures
         overall_score['macro_p@%d' % k] = correct_number / float(real_test_size * k)
-        overall_score['macro_r@%d' % k] = correct_number / float(valid_target_number)
+        overall_score['macro_r@%d' % k] = correct_number / float(appear_target_number)
         if overall_score['macro_p@%d' % k] + overall_score['macro_r@%d' % k] > 0:
             overall_score['macro_f1@%d' % k] = 2 * overall_score['macro_p@%d' % k] * overall_score[
                 'macro_r@%d' % k] / float(overall_score['macro_p@%d' % k] + overall_score['macro_r@%d' % k])

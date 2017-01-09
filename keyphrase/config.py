@@ -27,12 +27,23 @@ def setup_keyphrase_all():
 
     config['casestudy_log']   = config['path_experiment'] + '/case-print.log'
 
+    # do training?
+    config['do_train']        = False
+    # do predicting?
+    # config['do_predict']      = True
+    config['do_predict']      = False
+    # do testing?
+    config['do_evaluate']     = True
+    # config['do_evaluate']     = False
+    # do validation?
+    config['do_validate']     = False
+
     config['training_name']   = 'acm-sci-journal_600k'
     config['training_dataset']= config['path'] + '/dataset/keyphrase/million-paper/all_title_abstract_keyword_clean.json'
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['inspec', 'nus', 'semeval', 'krapivin', 'kdd', 'www', 'umd'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd'
+    config['testing_datasets']= ['inspec', 'nus', 'semeval', 'krapivin'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd'
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
     config['data_process_name'] = 'eos-punctuation-1000validation/'
@@ -41,6 +52,13 @@ def setup_keyphrase_all():
     config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id.pkl'
     config['dataset']         = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_dataset.pkl'
     config['voc']             = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_voc.pkl' # for manual check
+
+    # size
+    config['batch_size']      = 100
+    config['mini_batch_size'] = 20
+    config['mode']            = 'RNN'  # NTM
+    config['binary']          = False
+    config['voc_size']        = 50000
 
     # output log place
     if not os.path.exists(config['path_log']):
@@ -66,12 +84,33 @@ def setup_keyphrase_all():
     # if not os.path.exists(config['weights_file']):
     #     os.mkdir(config['weights_file'])
 
-    # size
-    config['batch_size']      = 100
-    config['mini_batch_size'] = 20
-    config['mode']            = 'RNN'  # NTM
-    config['binary']          = False
-    config['voc_size']        = 50000
+    config['max_len']         = 6
+    config['sample_beam']     = config['voc_size']
+    config['sample_stoch']    = False # use beamsearch
+    config['sample_argmax']   = False
+
+    config['predict_type']    = 'extractive' # type of prediction, extractive or generative
+    config['predict_path']    = config['path_experiment'] + '/predict.20170108-041052.data=4.len=6.beam=all.predict=appear_only/'
+                                # config['path_experiment'] + '/predict.20161231-152451.len=6.beam=200.target=appear_only/'
+                                # '/copynet-keyphrase-all.one2one.nocopy.extractive.predict.pkl'
+    if not os.path.exists(config['predict_path']):
+        os.mkdir(config['predict_path'])
+
+    # config['path_experiment'] + '/copynet-keyphrase-all.one2one.nocopy.generate.len=8.beam=50.predict.pkl'
+    # '/copynet-keyphrase-all.one2one.nocopy.extract.predict.pkl'
+    #config['path_experiment'] + '/'+ config['task_name']+ '.' + config['predict_type'] + ('.len={0}.beam={1}'.format(config['max_len'], config['sample_beam'])) + '.predict.pkl' # prediction on testing data
+
+    # Evaluation
+    config['baseline_data_path']     = config['path'] + '/dataset/keyphrase/baseline-data/'
+
+    config['normalize_score']   = True #
+    # config['normalize_score']   = True
+    config['target_filter']     = None # 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
+    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
+    config['keep_longest']      = False # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
+    config['noun_phrase_only']  = True
+
+    config['number_to_predict'] = 10 # [desperated] the k in P@k,R@k,F1@k
 
     # Encoder: Model
     config['bidirectional']   = True
@@ -121,30 +160,6 @@ def setup_keyphrase_all():
 
     config['decode_unk']      = False
     config['explicit_loc']    = False
-
-    config['max_len']         = 8
-    config['sample_beam']     = 200 # config['voc_size']
-    config['sample_stoch']    = False # use beamsearch
-    config['sample_argmax']   = False
-
-    config['predict_type']    = 'extractive' # type of prediction, extractive or generative
-    config['predict_path']    = config['path_experiment'] + '/predict.20161231-152451.len=6.beam=200/'
-                                # config['path_experiment'] + '/predict.' + config['timemark']+ '/'
-                                # '/copynet-keyphrase-all.one2one.nocopy.extractive.predict.pkl'
-    if not os.path.exists(config['predict_path']):
-        os.mkdir(config['predict_path'])
-
-    # config['path_experiment'] + '/copynet-keyphrase-all.one2one.nocopy.generate.len=8.beam=50.predict.pkl'
-    # '/copynet-keyphrase-all.one2one.nocopy.extract.predict.pkl'
-    #config['path_experiment'] + '/'+ config['task_name']+ '.' + config['predict_type'] + ('.len={0}.beam={1}'.format(config['max_len'], config['sample_beam'])) + '.predict.pkl' # prediction on testing data
-
-    # Evaluation
-    config['normalize_score']   = False #
-    # config['normalize_score']   = True
-    config['target_filter']     = 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
-    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
-    config['keep_longest']      = True # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
-    config['number_to_predict'] = 10 # [desperated] the k in P@k,R@k,F1@k
 
     # Gradient Tracking !!!
     config['gradient_check']  = True

@@ -1131,7 +1131,8 @@ class DecoderAtt(Decoder):
                    k=1, maxlen=30, stochastic=True,  # k = config['sample_beam'], maxlen = config['max_len']
                    argmax=False, fixlen=False,
                    return_attend=False,
-                   type='extractive'
+                   type='extractive',
+                   all_ngram=True
                    ):
         # beam size
         if k > 1:
@@ -1250,7 +1251,7 @@ class DecoderAtt(Decoder):
                 source_prob  = copy.copy(next_prob0[:, Lmax:])
                 for i in xrange(next_prob0.shape[0]): # loop over all the last words
                     for j in xrange(source_copies.shape[1]): # loop over all the source words
-                        if (source_copies[i, j] < Lmax) and (source_copies[i, j] != 1): # if word sss[i, j] in voc and not a unk
+                        if (source_copies[i, j] < Lmax) and (source_copies[i, j] != 1): # if word source_copies[i, j] in voc and not a unk
                             temple_prob[i, source_copies[i, j]] += source_prob[i, j] # add the copy prob to generative prob
                             temple_prob[i, Lmax + j]   = 0. # set the corresponding copy prob to be 0
 
@@ -1325,13 +1326,13 @@ class DecoderAtt(Decoder):
                 for idx in xrange(len(new_hyp_samples)):
                     # [bug] change to new_hyp_samples[idx][-1] == 0
                     # if (new_hyp_states[idx][-1] == 0) and (not fixlen):
-                    if (new_hyp_samples[idx][-1] == 0) and (not fixlen):
+                    if (new_hyp_samples[idx][-1] == 0 and not fixlen):
                         sample.append(new_hyp_samples[idx])
                         ppp.append(new_hyp_ppps[idx])
                         score.append(new_hyp_scores[idx])
                         state.append(new_hyp_states[idx])
                         # dead_k += 1
-                    else:
+                    if new_hyp_samples[idx][-1] != 0:
                         # limit predictions must appear in text
                         if type == 'extractive':
                             if new_hyp_samples[idx][-1] not in input_set:
@@ -1891,7 +1892,7 @@ class NRM(Model):
         return sample, np.exp(score), ppp
 
 
-    def generate_multiple(self, inputs, mode='display', return_attend=False, return_all=True):
+    def generate_multiple(self, inputs, mode='display', return_attend=False, return_all=True, all_ngram=True):
         # assert self.config['sample_stoch'], 'RNNLM sampling must be stochastic'
         # assert not self.config['sample_argmax'], 'RNNLM sampling cannot use argmax'
         args = dict(k=self.config['sample_beam'],
@@ -1899,7 +1900,9 @@ class NRM(Model):
                     stochastic=self.config['sample_stoch'] if mode == 'display' else None,
                     argmax=self.config['sample_argmax'] if mode == 'display' else None,
                     return_attend=return_attend,
-                    type=self.config['predict_type'])
+                    type=self.config['predict_type'],
+                    all_ngram=True
+                    )
         '''
         Return the encoding of input.
             Similar to encoder.encode(), but gate values are returned as well

@@ -12,6 +12,7 @@ import math
 import theano
 
 import keyphrase_utils
+from dataset import keyphrase_test_dataset
 
 theano.config.optimizer='fast_compile'
 from emolga.basic import optimizers
@@ -192,7 +193,7 @@ if __name__ == '__main__':
     logger.info('*' * 50)
 
     train_set, validation_set, test_sets, idx2word, word2idx = deserialize_from_file(config['dataset'])
-    # test_set = load_additional_testing_data(config['path']+'/dataset/keyphrase/ir-books/expert-conflict-free.json', idx2word, word2idx)
+    test_sets = keyphrase_test_dataset.load_additional_testing_data(config['testing_datasets'], idx2word, word2idx, config)
 
     logger.info('Load data done.')
     # data is too large to dump into file, so load from raw dataset directly
@@ -220,9 +221,9 @@ if __name__ == '__main__':
     # test_data_plain   = zip(*(test_set['source'],  test_set['target']))
 
     # trunk the over-long input in testing data
-    for test_set in test_sets.values():
-        test_set['source'] = [s if len(s)<1000 else s[:1000] for s in test_set['source']]
-    test_data_plain = np.concatenate([zip(*(t['source'],  t['target'])) for t in test_sets.values()])
+    # for test_set in test_sets.values():
+    #     test_set['source'] = [s if len(s)<1000 else s[:1000] for s in test_set['source']]
+    test_data_plain = np.concatenate([zip(*(t['source'],  t['target'])) for k,t in test_sets.items()])
 
     print('Avg length=%d, Max length=%d' % (
     np.average([len(s[0]) for s in test_data_plain]), np.max([len(s[0]) for s in test_data_plain])))
@@ -262,17 +263,12 @@ if __name__ == '__main__':
         loss  = []
 
         # do training?
-        # do_train     = True
-        do_train   = False
+        do_train     = config['do_train']
         # do predicting?
-        # do_predict = True
-        do_predict   = False
+        do_predict     = config['do_predict']
         # do testing?
-        do_evaluate  = True
-        # do_evaluate  = False
-        # do_validate  = True
-        do_validate  = False
-
+        do_evaluate     = config['do_evaluate']
+        do_validate     = config['do_validate']
 
         if do_train:
             # train_batches = output_stream(train_data, config['batch_size']).get_epoch_iterator(as_dict=True)
@@ -311,8 +307,8 @@ if __name__ == '__main__':
                 #     mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
                 #     mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
 
+                loss_batch = []
                 if not do_validate:
-                    loss_batch = []
                     dd = 0
                     max_size = 300000
                     stack_size = 0
@@ -343,8 +339,8 @@ if __name__ == '__main__':
                 mean_ppl = np.average(np.concatenate([l[1] for l in loss_batch]))
                 loss.append([mean_ll, mean_ppl])
                 # print progress
-                progbar.update(batch_id, [('loss_reg', loss[-1][0]),
-                                          ('ppl.', loss[-1][1])])
+                progbar.update(batch_id, [('loss_reg', mean_ll),
+                                          ('ppl.', mean_ppl)])
 
                 # 3. Quick testing
                 if batch_id % 200 == 0 and batch_id > 1:
@@ -450,7 +446,7 @@ if __name__ == '__main__':
 
                     mean_ll = np.average([l[0] for l in loss_valid])
                     mean_ppl = np.average([l[1] for l in loss_valid])
-                    logger.info('\tPrevious best score: \t ll=%f, \t ppl=%f' % (valid_best_score[0], valid_best_score[1]))
+                    logger.info('\tPrevious best score: \t ll=%f, \t ppl=%f' % (valid_param['valid_best_score'][0], valid_param['valid_best_score'][1]))
                     logger.info('\tCurrent score: \t ll=%f, \t ppl=%f' % (mean_ll, mean_ppl))
 
                     if mean_ll < valid_param['valid_best_score'][0]:
@@ -489,6 +485,7 @@ if __name__ == '__main__':
                 # print(dataset_name)
                 # print('Avg length=%d, Max length=%d' % (np.average([len(s) for s in test_set['source']]), np.max([len(s) for s in test_set['source']])))
                 test_data_plain = zip(*(test_set['source'], test_set['target']))
+
                 test_size = len(test_data_plain)
 
                 progbar_test = Progbar(test_size, logger)
@@ -513,15 +510,16 @@ if __name__ == '__main__':
                     test_s_o_list.append(test_s_o)
                     test_t_o_list.append(test_t_o)
 
-                    inputs_unk = np.asarray(unk_filter(np.asarray(test_s, dtype='int32')), dtype='int32')
-                    # print(len(inputs_unk))
+                    print('test_s_o=%d, test_t_o=%d, test_s=%d, test_t=%d' % (len(test_s_o), len(test_t_o), len(test_s), len(test_t)))
 
-                    prediction, score = agent.generate_multiple(inputs_unk[None, :], return_all=True)
+                    inputs_unk = np.asarray(unk_filter(np.asarray(test_s, dtype='int32')), dtype='int32')
+
+                    prediction, score = agent.generate_multiple(inputs_unk[None, :], return_all=True, all_ngram=True)
                     predictions.append(prediction)
                     scores.append(score)
                     progbar_test.update(idx, [])
                 # store predictions in file
-                serialize_to_file([test_s_list, test_t_list, test_s_o_list, test_t_o_list, predictions, scores, idx2word], config['predict_path']+'predict.{0}.{1}.pkl'.format(config['predict_type'], dataset_name))
+                serialize_to_file([test_set, test_s_list, test_t_list, test_s_o_list, test_t_o_list, predictions, scores, idx2word], config['predict_path']+'predict.{0}.{1}.pkl'.format(config['predict_type'], dataset_name))
 
         '''
         Evaluate on Testing Data
@@ -531,14 +529,30 @@ if __name__ == '__main__':
             for dataset_name in config['testing_datasets']:
                 print_test = open(config['predict_path'] + '/experiments.{0}.id={1}.testing@{2}.{3}.len={4}.beam={5}.log'.format(config['task_name'],config['timemark'],dataset_name, config['predict_type'], config['max_len'], config['sample_beam']), 'w')
 
-                test_s_list, test_t_list, test_s_o_list, test_t_o_list, predictions, scores, idx2word = deserialize_from_file(config['predict_path']+'predict.{0}.{1}.pkl'.format(config['predict_type'], dataset_name))
+                test_set, test_s_list, test_t_list, test_s_o_list, test_t_o_list, predictions, scores, idx2word = deserialize_from_file(config['predict_path']+'predict.{0}.{1}.pkl'.format(config['predict_type'], dataset_name))
 
-                print_test.write('Testing on %s size=%d @ epoch=%d \n' % (dataset_name, test_size, epoch))
-                # load from predicted result
+                # keep the first 400 in krapivin
+                if dataset_name == 'krapivin':
+                    for v in test_set.values():
+                        v           = v[:400]
+                    test_s_list     = test_s_list[:400]
+                    test_t_list     = test_t_list[:400]
+                    test_s_o_list   = test_s_o_list[:400]
+                    test_t_o_list   = test_t_o_list[:400]
+                    predictions     = predictions[:400]
+                    scores          = scores[:400]
+
+                print_test.write('Evaluating on %s size=%d @ epoch=%d \n' % (dataset_name, test_size, epoch))
+                logger.info('Evaluating on %s size=%d @ epoch=%d \n' % (dataset_name, test_size, epoch))
+
+                do_stem = True
+                if dataset_name == 'semeval':
+                    do_stem = False
+
                 # Evaluation
-                outs, overall_score = keyphrase_utils.evaluate_multiple(config, test_s_list, test_t_list,
+                outs, overall_score = keyphrase_utils.evaluate_multiple(config, test_set, test_s_list, test_t_list,
                                                             test_s_o_list, test_t_o_list,
-                                                            predictions, scores, idx2word)
+                                                            predictions, scores, idx2word, do_stem)
 
                 print_test.write(' '.join(outs))
                 print_test.write(' '.join(['%s : %s' % (str(k), str(v)) for k,v in overall_score.items()]))
@@ -546,8 +560,6 @@ if __name__ == '__main__':
 
                 logger.info(overall_score)
                 print_test.close()
-
-            exit()
 
             # write examples to log file
             # # test accuracy

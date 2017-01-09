@@ -10,6 +10,9 @@ import numpy
 import numpy as np
 import re
 
+import emolga.dataset.build_dataset as db
+from config import setup_keyphrase_all
+
 sent_detector = nltk.data.load('tokenizers/punkt/english.pickle')
 SENTENCEDELIMITER = '<eos>'
 DIGIT = '<digit>'
@@ -78,8 +81,8 @@ def build_data(data, idx2word, word2idx):
     Lmax = len(idx2word)
 
     # don't keep the original string, or the dataset would be over 2gb
-    # instance = dict(source_str=[], target_str=[], source=[], target=[], target_c=[])
-    instance = dict(source=[], target=[])
+    instance = dict(source_str=[], target_str=[], source=[], target=[], target_c=[])
+    # instance = dict(source=[], target=[])
     for count, pair in enumerate(data):
         source, target = pair
 
@@ -95,8 +98,8 @@ def build_data(data, idx2word, word2idx):
         C = [[0 if w not in source else source.index(w) + Lmax for w in p] for p in target]
 
         # actually only source,target,target_c are used in model
-        # instance['source_str'] += [source]
-        # instance['target_str'] += [target]
+        instance['source_str'] += [source]
+        instance['target_str'] += [target]
         instance['source'] += [A]
         instance['target'] += [B]
         # instance['target_c'] += [C]
@@ -151,3 +154,30 @@ def load_pairs(records, filter=False):
         filtered_records.append(record)
 
     return filtered_records, pairs, wordfreq
+
+def get_none_phrases(source_text, source_postag, max_len):
+    np_regex = r'^(JJ|JJR|JJS|VBG|VBN)*(NN|NNS|NNP|NNPS|VBG)+$'
+    np_list = []
+
+    for i in range(len(source_text)-1):
+        for j in range(i+1, len(source_text)):
+            if j-i > max_len:
+                continue
+            if j-i == 1 and (source_text[i:j]=='<digit>' or len(source_text[i:j][0])==1):
+                continue
+            tagseq = ''.join(source_postag[i:j])
+            if re.match(np_regex, tagseq):
+                np_list.append((source_text[i:j], source_postag[i:j]))
+
+    print('Text: \t\t %s' % str(source_text))
+    print('None Phrases:[%d] \n\t\t\t%s' % (len(np_list), str('\n\t\t\t'.join([str(p[0])+'['+str(p[1])+']' for p in np_list]))))
+
+    return np_list
+
+
+if __name__ == '__main__':
+    config = setup_keyphrase_all()
+    test_set = db.deserialize_from_file(
+        config['path'] + '/dataset/keyphrase/' + config['data_process_name'] + 'semeval.testing.pkl')
+    for s_index, s_str, s_tag in zip(test_set['source'], test_set['source_str'], [[s[1] for s in d ]for d in test_set['tagged_source']]):
+        get_none_phrases(s_str, s_tag, config['max_len'])
