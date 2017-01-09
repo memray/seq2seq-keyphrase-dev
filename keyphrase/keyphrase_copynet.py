@@ -14,6 +14,8 @@ import theano
 import keyphrase_utils
 
 theano.config.optimizer='fast_compile'
+from emolga.basic import optimizers
+
 theano.config.exception_verbosity='high'
 # theano.config.compute_test_value = 'warn'
 
@@ -100,7 +102,7 @@ def prepare_batch(batch, mask, fix_len=None):
 
 def cc_martix(source, target):
     '''
-    return the copy matrix
+    return the copy matrix, size = [nb_sample, max_len_source, max_len_target]
     '''
     cc = np.zeros((source.shape[0], target.shape[1], source.shape[1]), dtype='float32')
     for k in xrange(source.shape[0]): # go over each sample in source batch
@@ -251,9 +253,10 @@ if __name__ == '__main__':
 
     epoch   = 0
     epochs = 10
-    valid_best_score    = (float(sys.maxint),float(sys.maxint))
-    valids_not_improved = 0
-    patience            = 5
+    valid_param = {}
+    valid_param['valid_best_score'] = (float(sys.maxint),float(sys.maxint))
+    valid_param['valids_not_improved'] = 0
+    valid_param['patience']            = 3
     while epoch < epochs:
         epoch += 1
         loss  = []
@@ -284,8 +287,10 @@ if __name__ == '__main__':
             batch_start = 0
 
             if config['resume_training'] and epoch == 1:
-                name_ordering, batch_start, loss = deserialize_from_file(config['training_archive'])
+                name_ordering, batch_id, loss, valid_param, optimizer_config = deserialize_from_file(config['training_archive'])
                 batch_start += 1
+
+                agent.optimizer = optimizers.get(config['optimizer'], kwargs=dict(rng=agent.rng, save=False, clipnorm=config['clipnorm']).update(optimizer_config))
                 # batch_start = 40001
 
             for batch_id in range(batch_start, num_batches):
@@ -330,16 +335,15 @@ if __name__ == '__main__':
                         else:
                             loss_batch += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
 
-                        mini_data_s = []
-                        mini_data_t = []
-                        stack_size  = 0
-                        print(len(loss_batch))
+                    mini_data_s = []
+                    mini_data_t = []
+                    stack_size  = 0
 
-                    mean_ll  = np.average(np.concatenate([l[0] for l in loss_batch]))
-                    mean_ppl = np.average(np.concatenate([l[1] for l in loss_batch]))
-                    loss.append([mean_ll, mean_ppl])
-                    # print progress
-                    progbar.update(batch_id, [('loss_reg', loss[-1][0]),
+                mean_ll  = np.average(np.concatenate([l[0] for l in loss_batch]))
+                mean_ppl = np.average(np.concatenate([l[1] for l in loss_batch]))
+                loss.append([mean_ll, mean_ppl])
+                # print progress
+                progbar.update(batch_id, [('loss_reg', loss[-1][0]),
                                           ('ppl.', loss[-1][1])])
 
                 # 3. Quick testing
@@ -403,6 +407,10 @@ if __name__ == '__main__':
                     # 1. Prepare data
                     data_s = np.array(validation_set['source'])
                     data_t = np.array(validation_set['target'])
+
+                    if len(data_s) > 2000:
+                        data_s = data_s[:2000]
+                        data_t = data_t[:2000]
                     # if not multi_output, split one data (with multiple targets) into multiple ones
                     if not config['multi_output']:
                         data_s, data_t = split_into_multiple_and_padding(data_s, data_t)
@@ -414,7 +422,7 @@ if __name__ == '__main__':
                     #     mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
 
                     dd = 0
-                    max_size = 300000
+                    max_size = 250000
                     stack_size = 0
                     mini_data_s = []
                     mini_data_t = []
@@ -445,18 +453,28 @@ if __name__ == '__main__':
                     logger.info('\tPrevious best score: \t ll=%f, \t ppl=%f' % (valid_best_score[0], valid_best_score[1]))
                     logger.info('\tCurrent score: \t ll=%f, \t ppl=%f' % (mean_ll, mean_ppl))
 
-                    if np.mean([l[0] for l in loss_valid]) < valid_best_score[0]:
-                        valid_best_score = (np.mean([l[0] for l in loss_valid]), np.mean([l[1] for l in loss_valid]))
+                    if mean_ll < valid_param['valid_best_score'][0]:
+                        valid_param['valid_best_score'] = (mean_ll, mean_ppl)
                         logger.info('New best score')
-                        valids_not_improved = 0
+                        valid_param['valids_not_improved'] = 0
                     else:
-                        valids_not_improved += 1
-                        logger.info('Not improved for %s tests.' % valids_not_improved)
+                        valid_param['valids_not_improved'] += 1
+                        logger.info('Not improved for %s tests.' % valid_param['valids_not_improved'])
 
-                    if valids_not_improved >= patience:
-                        print "Not improved for %s epochs. Stopping..." % patience
-                        break
-                    exit()
+                # 5. Save model
+                if batch_id % 2 == 0 and batch_id > 1:
+                    # save the weights every K rounds
+                    agent.save(config['path_experiment'] + '/experiments.{0}.id={1}.epoch={2}.batch={3}.pkl'.format(config['task_name'], config['timemark'], epoch, batch_id))
+
+                    # save the game(training progress) in case of interrupt!
+                    optimizer_config = agent.optimizer.get_config()
+                    serialize_to_file([name_ordering, batch_id, loss, valid_param, optimizer_config], config['path_experiment'] + '/save_training_status.id={0}.epoch={1}.batch={2}.pkl'.format(config['timemark'], epoch, batch_id))
+                    # agent.save_weight_json(config['path_experiment'] + '/weight.print.id={0}.epoch={1}.batch={2}.json'.format(config['timemark'], epoch, batch_id))
+
+                # 6. Stop if exceed patience
+                if valid_param['valids_not_improved']  >= valid_param['patience']:
+                    print("Not improved for %s epochs. Stopping..." % valid_param['patience'])
+                    break
 
         '''
         test accuracy and f-score at the end of each epoch

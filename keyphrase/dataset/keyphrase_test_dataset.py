@@ -9,12 +9,14 @@ import re
 import shutil
 
 import nltk
+import xml.etree.ElementTree as ET
 
 from emolga.utils.generic_utils import get_from_module
 
 import data_utils as utils
 from keyphrase.config import setup_keyphrase_all, setup_keyphrase_all_testing
 from emolga.dataset.build_dataset import deserialize_from_file, serialize_to_file
+
 __author__ = "Rui Meng"
 __email__ = "rui.meng@pitt.edu"
 
@@ -25,6 +27,9 @@ class Document(object):
         self.title      = ''
         self.text       = ''
         self.phrases    = []
+
+    def __str__(self):
+        return '%s\n\t%s\n\t%s' % (self.title, self.text, str(self.phrases))
 
 
 class DataLoader(object):
@@ -37,8 +42,12 @@ class DataLoader(object):
         '''
         :return: a list of dict instead of the Document object
         '''
-        self.load_text(self.textdir)
-        self.load_keyphrase(self.keyphrasedir)
+        class_name = self.__class__.__name__.lower()
+        if class_name == 'kdd' or class_name == 'www' or class_name == 'umd':
+            self.load_xml(self.textdir)
+        else:
+            self.load_text(self.textdir)
+            self.load_keyphrase(self.keyphrasedir)
 
         doclist = []
         for d in self.doclist:
@@ -51,8 +60,8 @@ class DataLoader(object):
         return doclist
 
     def __call__(self, idx2word, word2idx, type = 1):
-        self.load_text(self.textdir)
-        self.load_keyphrase(self.keyphrasedir)
+        self.get_docs()
+
         pairs = []
 
         for doc in self.doclist:
@@ -82,6 +91,34 @@ class DataLoader(object):
         dataset = utils.build_data(pairs, idx2word, word2idx)
 
         return dataset, self.doclist
+
+    def load_xml(self, xmldir):
+        '''
+        for KDD/WWW/UMD only
+        :return: doclist
+        '''
+        for filename in os.listdir(xmldir):
+            with open(xmldir+filename) as textfile:
+                doc = Document()
+                doc.name = filename[:filename.find('.xml')]
+
+                import string
+                printable = set(string.printable)
+
+                # print((filename))
+                try:
+                    lines = textfile.readlines()
+                    xml = ''.join([filter(lambda x: x in printable, l) for l in lines])
+                    root = ET.fromstring(xml)
+
+                    doc.title = root.findall("title")[0].text
+                    doc.abstract = root.findall("abstract")[0].text
+                    doc.phrases = [n.text for n in root.findall("*/tag")]
+
+                    self.doclist.append(doc)
+
+                except UnicodeDecodeError:
+                    print('UnicodeDecodeError detected! %s' % filename )
 
     def load_text(self, textdir):
         for filename in os.listdir(textdir):
@@ -115,11 +152,17 @@ class DataLoader(object):
     def load_keyphrase(self, keyphrasedir):
         for doc in self.doclist:
             phrase_set = set()
-            with open(keyphrasedir+doc.name+'.keyphrases') as keyphrasefile:
-                phrase_set.update([phrase.strip() for phrase in keyphrasefile.readlines()])
+            if os.path.exists(self.keyphrasedir + doc.name + '.keyphrases'):
+                with open(keyphrasedir+doc.name+'.keyphrases') as keyphrasefile:
+                    phrase_set.update([phrase.strip() for phrase in keyphrasefile.readlines()])
+            # else:
+            #     print(self.keyphrasedir + doc.name + '.keyphrases Not Found')
 
-            with open(keyphrasedir + doc.name + '.keywords') as keyphrasefile:
-                phrase_set.update([phrase.strip() for phrase in keyphrasefile.readlines()])
+            if os.path.exists(self.keyphrasedir + doc.name + '.keywords'):
+                with open(keyphrasedir + doc.name + '.keywords') as keyphrasefile:
+                    phrase_set.update([phrase.strip() for phrase in keyphrasefile.readlines()])
+            # else:
+            #     print(self.keyphrasedir + doc.name + '.keywords Not Found')
 
             doc.phrases = list(phrase_set)
 
@@ -159,14 +202,21 @@ class NUS(DataLoader):
                 with open(key_file, 'r') as f:
                     keyphrases.update(set([l.strip() for l in f.readlines()]))
             # write into gold_standard_keyphrases/
-            with open(self.keyphrasedir + paper_id + '.keyphrases', 'w') as f:
-                for key in list(keyphrases):
-                    if key.find(' ') != -1:
-                        f.write(key+'\n')
-            with open(self.keyphrasedir + paper_id + '.keywords', 'w') as f:
-                for key in list(keyphrases):
-                    if key.find(' ') == -1:
-                        f.write(key+'\n')
+            if os.path.exists(self.keyphrasedir + paper_id + '.keyphrases'):
+                with open(self.keyphrasedir + paper_id + '.keyphrases', 'w') as f:
+                    for key in list(keyphrases):
+                        if key.find(' ') != -1:
+                            f.write(key+'\n')
+            # else:
+            #     print(self.keyphrasedir + paper_id + '.keyphrases Not Found')
+
+            if os.path.exists(self.keyphrasedir + paper_id + '.keywords'):
+                with open(self.keyphrasedir + paper_id + '.keywords', 'w') as f:
+                    for key in list(keyphrases):
+                        if key.find(' ') == -1:
+                            f.write(key+'\n')
+            # else:
+            #     print(self.keyphrasedir + paper_id + '.keywords Not Found')
 
 class SemEval(DataLoader):
     def __init__(self, **kwargs):
@@ -175,11 +225,72 @@ class SemEval(DataLoader):
         self.textdir = self.datadir + '/all_texts/'
         self.keyphrasedir = self.datadir + '/gold_standard_keyphrases_3/'
 
+class KRAPIVIN(DataLoader):
+    def __init__(self, **kwargs):
+        super(KRAPIVIN, self).__init__(**kwargs)
+        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/KRAPIVIN'
+        self.textdir = self.datadir + '/all_texts/'
+        self.keyphrasedir = self.datadir + '/gold_standard_keyphrases/'
+
+    def load_text(self, textdir):
+        for filename in os.listdir(textdir):
+            with open(textdir+filename) as textfile:
+                doc = Document()
+                doc.name = filename[:filename.find('.txt')]
+
+                import string
+                printable = set(string.printable)
+
+                # print((filename))
+                try:
+                    lines = textfile.readlines()
+
+                    lines = [filter(lambda x: x in printable, l) for l in lines]
+
+                    title = lines[1].encode('ascii', 'ignore').decode('ascii', 'ignore')
+                    # the 2nd line is abstract title
+                    text  = lines[3].encode('ascii', 'ignore').decode('ascii', 'ignore')
+
+                    # if lines[1].strip().lower() != 'abstract':
+                    #     print('Wrong title detected : %s' % (filename))
+
+                    doc.title = title
+                    doc.text  = text
+                    self.doclist.append(doc)
+
+                except UnicodeDecodeError:
+                    print('UnicodeDecodeError detected! %s' % filename )
+
+class KDD(DataLoader):
+    def __init__(self, **kwargs):
+        super(KDD, self).__init__(**kwargs)
+        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/KDD'
+        self.textdir = self.datadir + '/acmparsed/'
+        self.keyphrasedir = self.datadir + '/acmparsed/'
+
+class WWW(DataLoader):
+    def __init__(self, **kwargs):
+        super(WWW, self).__init__(**kwargs)
+        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/WWW'
+        self.textdir = self.datadir + '/acmparsed/'
+        self.keyphrasedir = self.datadir + '/acmparsed/'
+
+class UMD(DataLoader):
+    def __init__(self, **kwargs):
+        super(UMD, self).__init__(**kwargs)
+        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/UMD'
+        self.textdir = self.datadir + '/acmparsed/'
+        self.keyphrasedir = self.datadir + '/acmparsed/'
+
 
 # aliases
 inspec = INSPEC
 nus = NUS
 semeval = SemEval
+krapivin = KRAPIVIN
+kdd = KDD
+www = WWW
+umd = UMD
 # irbooks = IRBooks
 
 def load_testing_data(identifier, kwargs=None):
@@ -187,27 +298,36 @@ def load_testing_data(identifier, kwargs=None):
     load testing data dynamically
     :return:
     '''
-    data_loader = get_from_module(identifier, globals(), 'optimizer', instantiate=True,
+    data_loader = get_from_module(identifier, globals(), 'data_loader', instantiate=True,
                            kwargs=kwargs)
     return data_loader
 
 if __name__ == '__main__':
-    config = setup_keyphrase_all_testing()
-    train_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
+    config = setup_keyphrase_all()
+    train_set, validation_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
 
     for dataset_name in config['testing_datasets']:
         print('*' * 50)
         print(dataset_name)
         loader = load_testing_data(dataset_name, kwargs=dict(basedir = config['path']))
 
-        test_set = loader(idx2word, word2idx, type=0)
-        test_data_plain = zip(*(test_set['source'], test_set['target']))
+        test_set, doclist = loader(idx2word, word2idx, type=0)
+        test_data_plain = zip(*(test_set['source'], test_set['target'], doclist))
 
         for idx in xrange(len(test_data_plain)):  # len(test_data_plain)
-            test_s_o, test_t_o = test_data_plain[idx]
-            doc = loader.doclist[idx]
+            test_s_o, test_t_o, doc = test_data_plain[idx]
+            target = doc.phrases
 
-            print('%d - %d : %d' % (idx, len(test_s_o), len(test_t_o)))
+
+            if len(doc.text) < 50000:
+                print('%d - %d : %d   \n\tname=%s, \n\ttitle=%s, \n\ttext=%s, \n\tlen(keyphrase)=%d' % (idx, len(test_s_o), len(test_t_o), doc.name, doc.title, doc.text, len(''.join(target))))
+                print(doc)
+
+            if (len(target)!=0 and len(''.join(target))/len(target) < 3):
+                print('!' * 100)
+                print('Error found')
+                print('%d - %d : %d   name=%s, title=%d, text=%d, len(keyphrase)=%d' % (idx, len(test_s_o), len(test_t_o), doc.name, len(doc.title), len(doc.text), len(''.join(target))))
+
             # if len(test_t_o) < 3:
             #
             #     doc.text = re.sub(r'[\r\n\t]', ' ', doc.text)

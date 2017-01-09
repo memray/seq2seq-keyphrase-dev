@@ -32,7 +32,7 @@ def setup_keyphrase_all():
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['inspec', 'nus', 'semeval'] # 'inspec', 'nus', 'semeval'
+    config['testing_datasets']= ['inspec', 'nus', 'semeval', 'krapivin', 'kdd', 'www', 'umd'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd'
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
     config['data_process_name'] = 'eos-punctuation-1000validation/'
@@ -184,13 +184,14 @@ def setup_keyphrase_all_testing():
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['inspec', 'nus', 'semeval'] # 'inspec', 'nus', 'semeval'
+    config['testing_datasets']= ['inspec', 'nus', 'semeval', 'krapivin']
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
-    config['data_process_name'] = 'eos-punctuation-1000validation/'
+    config['data_process_name'] = 'punctuation-20000validation-20000testing/'
 
-    config['validation_size'] = 1000
-    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id.pkl'
+    config['validation_size'] = 20000
+    config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id_'+config['validation_size']+'.pkl'
+    config['testing_id']      = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'testing_id_'+config['validation_size']+'.pkl'
     config['dataset']         = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_dataset.pkl'
     config['voc']             = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'all_600k_voc.pkl' # for manual check
 

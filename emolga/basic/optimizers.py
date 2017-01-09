@@ -212,6 +212,9 @@ class Adam(Optimizer):  # new Adam is designed for our purpose.
         self.noise      = []
         self.forget     = dict()
         self.rng        = rng
+        self.beta_1     = beta_1
+        self.beta_2     = beta_2
+        self.epsilon    = epsilon
 
         self.add(self.iterations)
         self.add(self.lr)
@@ -267,6 +270,18 @@ class Adam(Optimizer):  # new Adam is designed for our purpose.
         if self.save:
             return self.updates, self.pu
         return self.updates
+
+    def get_config(self):
+        print(theano.tensor.cast(self.lr, dtype='float32').eval())
+        print(theano.tensor.cast(self.iterations, dtype='int32').eval())
+        config = {'lr':     float(theano.tensor.cast(self.lr, dtype='float32').eval()),
+                  'beta_1': float(self.beta_1),
+                  'beta_2': float(self.beta_2),
+                  'iteration':  theano.tensor.cast(self.iterations, dtype='int32').eval(),
+                  'noise':  self.noise
+                  }
+        base_config = super(Adam, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
 
 # aliases
 sgd = SGD
