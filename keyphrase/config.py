@@ -138,8 +138,9 @@ def setup_keyphrase_all():
     config['normalize_score']   = False #
     # config['normalize_score']   = True
     config['target_filter']     = 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
-    config['predict_filter']    = None # whether do filtering on predictions? 'appear-only'(don't work on extractive predicting),'non-appear-only' and None
-    config['number_to_predict'] = 10 #the k in P@k,R@k,F1@k
+    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
+    config['keep_longest']      = True # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
+    config['number_to_predict'] = 10 # [desperated] the k in P@k,R@k,F1@k
 
     # Gradient Tracking !!!
     config['gradient_check']  = True
@@ -195,14 +196,14 @@ def setup_keyphrase_all_testing():
         os.mkdir(config['path_log'])
 
     # trained_model
-    config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.copy.id=20170106-013851.epoch=1.batch=2.pkl'
+    config['trained_model']   = config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
     # A well-trained model on all data
     #   path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy.<eol><digit>.emb=100.hid=150/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     # A well-trained model on acm data
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     config['weight_json']= config['path_experiment'] + '/model_weight.json'
-    config['resume_training'] = True
-    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20170106-013851.epoch=1.batch=2.pkl'
+    config['resume_training'] = False
+    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20161220-070035.epoch=2.batch=20000.pkl'
         #config['path_experiment'] + '/save_training_status.pkl'
 
     # # output hdf5 file.

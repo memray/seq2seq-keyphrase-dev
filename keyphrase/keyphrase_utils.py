@@ -6,6 +6,15 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
+def cut_zero(sample, idx2word):
+    sample = list(sample)
+    if 0 not in sample:
+        return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample]
+    # return the string before 0 (<eol>)
+    return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample[:sample.index(0)]]
+
+
 def evaluate_multiple(config, inputs, outputs,
                       original_input, original_outputs,
                       samples, scores, idx2word):
@@ -17,15 +26,6 @@ def evaluate_multiple(config, inputs, outputs,
     :return:
     '''
 
-    def cut_zero(sample, idx2word, Lmax=None):
-        sample = list(sample)
-        if Lmax is None:
-            Lmax = config['dec_voc_size']
-        if 0 not in sample:
-            return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample]
-        # return the string before 0 (<eol>)
-        return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample[:sample.index(0)]]
-
     # Generate keyphrases
     # if inputs_unk is None:
     #     samples, scores = self.generate_multiple(inputs[None, :], return_all=True)
@@ -35,7 +35,8 @@ def evaluate_multiple(config, inputs, outputs,
     stemmer = PorterStemmer()
     # Evaluation part
     outs = []
-    metrics = []
+    micro_metrics = []
+    micro_matches = []
 
     # load stopword
     with open(config['path'] + '/dataset/stopword/stopword_en.txt') as stopword_file:
@@ -108,7 +109,7 @@ def evaluate_multiple(config, inputs, outputs,
                     keep = False
                 if re.match(r'[_,\(\)\.\'%]', w):
                     keep = False
-                    print('\t\tPunctuations! - %s' % str(predict))
+                    # print('\t\tPunctuations! - %s' % str(predict))
                 if w == '<digit>':
                     number_digit += 1
 
@@ -156,7 +157,8 @@ def evaluate_multiple(config, inputs, outputs,
 
             # if #(word) == #(letter), it predicts like this: h a s k e l
             if sum([len(w) for w in predict])==len(predict) and len(predict) > 2:
-                print('\t\tall letters! - %s' % str(predict))
+                keep = False
+                # print('\t\tall letters! - %s' % str(predict))
 
             # discard invalid ones
             if not keep:
@@ -220,6 +222,9 @@ def evaluate_multiple(config, inputs, outputs,
 
         metric_dict = {}
 
+        '''
+        Compute micro metrics
+        '''
         for number_to_predict in [5, 10, 15]:
             metric_dict['p@%d' % number_to_predict] = float(sum(correctly_matched[:number_to_predict])) / float(
                 number_to_predict)
@@ -241,16 +246,46 @@ def evaluate_multiple(config, inputs, outputs,
             metric_dict['target_number'] = len(target_list)
             metric_dict['correct_number@%d' % number_to_predict] = sum(correctly_matched[:number_to_predict])
 
-        metrics.append(metric_dict)
+            # Compute the binary preference measure (Bpref)
+            bpref = 0.
+            trunked_match = correctly_matched[:number_to_predict].tolist()  # get the first K prediction to evaluate
+            match_indexes = np.nonzero(trunked_match)[0]
 
+            if len(match_indexes) > 0:
+                for mid, mindex in enumerate(match_indexes):
+                    bpref += 1. - float(mindex - mid) / float(number_to_predict)  # there're mindex elements, and mid elements are correct, before the (mindex+1)-th element
+                metric_dict['bpref@%d' % number_to_predict] = float(bpref)/float(len(match_indexes))
+            else:
+                metric_dict['bpref@%d' % number_to_predict] = 0
+
+            # Compute the mean reciprocal rank (MRR)
+            rank_first = 0
+            try:
+                rank_first = trunked_match.index(1) + 1
+            except ValueError:
+                pass
+
+            if rank_first > 0:
+                metric_dict['mrr@%d' % number_to_predict] = float(1)/float(rank_first)
+            else:
+                metric_dict['mrr@%d' % number_to_predict] = 0
+
+        micro_metrics.append(metric_dict)
+        micro_matches.append(correctly_matched)
+
+        '''
+        Print information on each prediction
+        '''
         # print stuff
-        a = '[SOURCE]: {}'.format(' '.join(cut_zero(input_sentence, idx2word)))
+        a = '[SOURCE][{0}]: {1}'.format(len(input_sentence) ,' '.join(cut_zero(input_sentence, idx2word)))
         logger.info(a)
+        a += '\n'
 
         b = '[TARGET]: %d/%d targets\n\t\t' % (len(target_outputs), len(target_list))
         for id, target in enumerate(target_outputs):
             b += ' '.join(target) + '; '
         logger.info(b)
+        b += '\n'
         c = '[DECODE]: %d/%d predictions' % (len(predict_outputs), len(predict_list))
         for id, (predict, score) in enumerate(zip(predict_outputs, predict_scores)):
             c += ('\n\t\t[%.3f][%d][%d]' % (score, len(predict), sum([len(w) for w in predict]))) + ' '.join(predict)
@@ -269,12 +304,77 @@ def evaluate_multiple(config, inputs, outputs,
         a += b + c
 
         for number_to_predict in [5, 10, 15]:
-            d = '@%d - Precision=%.4f, Recall=%.4f, F1=%.4f' % (
+            d = '@%d - Precision=%.4f, Recall=%.4f, F1=%.4f, Bpref=%.4f, MRR=%.4f' % (
             number_to_predict, metric_dict['p@%d' % number_to_predict], metric_dict['r@%d' % number_to_predict],
-            metric_dict['f1@%d' % number_to_predict])
+            metric_dict['f1@%d' % number_to_predict], metric_dict['bpref@%d' % number_to_predict], metric_dict['mrr@%d' % number_to_predict])
             logger.info(d)
-            a += d
+            a += d + '\n'
 
+        logger.info('*' * 100)
         outs.append(a)
+        outs.append('*' * 100 + '\n')
 
-    return outs, metrics
+    # omit the bad data which contains 0 predictions
+    # real_test_size = sum([1 if m['target_number'] > 0 else 0 for m in micro_metrics])
+    real_test_size = len(inputs)
+
+    '''
+    Compute the corpus evaluation
+    '''
+    overall_score = {}
+    for k in [5, 10, 15]:
+        correct_number = sum([m['correct_number@%d' % k] for m in micro_metrics])
+        valid_target_number = sum([m['valid_target_number'] for m in micro_metrics])
+        target_number = sum([m['target_number'] for m in micro_metrics])
+
+        # Compute the Micro Measures, by averaging the micro-score of each prediction
+        overall_score['p@%d' % k] = float(sum([m['p@%d' % k] for m in micro_metrics])) / float(real_test_size)
+        overall_score['r@%d' % k] = float(sum([m['r@%d' % k] for m in micro_metrics])) / float(real_test_size)
+        overall_score['f1@%d' % k] = float(sum([m['f1@%d' % k] for m in micro_metrics])) / float(real_test_size)
+
+        output_str = 'Overall - %s valid testing data=%d, Number of Target=%d/%d, Number of Prediction=%d, Number of Correct=%d' % (
+                    config['predict_type'], real_test_size,
+                    valid_target_number, target_number,
+                    real_test_size * k, correct_number
+        )
+        outs.append(output_str+'\n')
+        logger.info(output_str)
+        output_str = 'Micro:\t\tP@%d=%f, R@%d=%f, F1@%d=%f' % (
+                    k, overall_score['p@%d' % k],
+                    k, overall_score['r@%d' % k],
+                    k, overall_score['f1@%d' % k]
+        )
+        outs.append(output_str+'\n')
+        logger.info(output_str)
+
+        # Compute the Macro Measures
+        overall_score['macro_p@%d' % k] = correct_number / float(real_test_size * k)
+        overall_score['macro_r@%d' % k] = correct_number / float(valid_target_number)
+        if overall_score['macro_p@%d' % k] + overall_score['macro_r@%d' % k] > 0:
+            overall_score['macro_f1@%d' % k] = 2 * overall_score['macro_p@%d' % k] * overall_score[
+                'macro_r@%d' % k] / float(overall_score['macro_p@%d' % k] + overall_score['macro_r@%d' % k])
+        else:
+            overall_score['macro_f1@%d' % k] = 0
+
+        output_str = 'Macro:\t\tP@%d=%f, R@%d=%f, F1@%d=%f' % (
+                    k, overall_score['macro_p@%d' % k],
+                    k, overall_score['macro_r@%d' % k],
+                    k, overall_score['macro_f1@%d' % k]
+        )
+        outs.append(output_str+'\n')
+        logger.info(output_str)
+
+        # Compute the binary preference measure (Bpref)
+        overall_score['bpref@%d' % k] = float(sum([m['bpref@%d' % k] for m in micro_metrics])) / float(real_test_size)
+
+        # Compute the mean reciprocal rank (MRR)
+        overall_score['mrr@%d' % k] = float(sum([m['mrr@%d' % k] for m in micro_metrics])) / float(real_test_size)
+
+        output_str = '\t\t\tBpref@%d=%f, MRR@%d=%f' % (
+                    k, overall_score['bpref@%d' % k],
+                    k, overall_score['mrr@%d' % k]
+        )
+        outs.append(output_str+'\n')
+        logger.info(output_str)
+
+    return outs, overall_score

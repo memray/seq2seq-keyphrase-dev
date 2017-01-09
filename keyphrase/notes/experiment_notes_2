@@ -55,7 +55,9 @@ Experiment
     Prediction Directory:copynet-keyphrase-all.one2one.copy/predict.20161230-145652
     Data: dataset/keyphrase/eos-punctuation-no_validation/
 
-    Predict params:
+    [1] Prediction
+    path: predict.20161230-145652
+    params:
         config['max_len']         = 6
         config['sample_beam']     = 1000 # for extractive prediction
         config['predict_type']    = 'extractive' # type of prediction, extractive or generative
@@ -152,28 +154,107 @@ Experiment
         Micro:		P@15=0.176433, R@15=0.358596, F1@15=0.223179
         Macro:		P@15=0.176433, R@15=0.378992, F1@15=0.240777
 
-    7. Another prediction, change the config['sample_beam'] from 100 to 200
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=3628
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Micro:		P@5=0.362800, R@5=0.272123, F1@5=0.289624
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Macro:		P@5=0.362800, R@5=0.259774, F1@5=0.302762
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=5214
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Micro:		P@10=0.260700, R@10=0.362174, F1@10=0.284152
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Macro:		P@10=0.260700, R@10=0.373335, F1@10=0.307013
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=5723
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Micro:		P@15=0.190767, R@15=0.386270, F1@15=0.240893
-01/01/2017 07:32:45 [INFO] keyphrase_copynet: Macro:		P@15=0.190767, R@15=0.409781, F1@15=0.260338
+    [2] Prediction
+    change the config['sample_beam'] from 100 to 200, results improved.
+    But I find that the evaluation is not quite correct. I filtered out some bad documents
+        # omit the bad data which contains 0 predictions
+        real_test_size = sum([1 if m['target_number'] > 0 else 0 for m in micro_metrics])
 
+    path: predict.20161231-152451
+    params:
+        config['max_len']         = 6
+        config['sample_beam']     = 200 # for extractive prediction
+        config['predict_type']    = 'extractive' # type of prediction, extractive or generative
 
+    Log:
+        experiments.copynet-keyphrase-all.one2one.copy.id=20161231-152451.log
+        experiments.copynet-keyphrase-all.one2one.copy.id=20170104-230917.log
+    INSPEC:
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=3628
+        Micro:		P@5=0.362800, R@5=0.272123, F1@5=0.289624
+        Macro:		P@5=0.362800, R@5=0.259774, F1@5=0.302762
+        			Bpref@5=0.645500, MRR@5=0.608767
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=5214
+        Micro:		P@10=0.260700, R@10=0.362174, F1@10=0.284152
+        Macro:		P@10=0.260700, R@10=0.373335, F1@10=0.307013
+                    Bpref@10=0.684627, MRR@10=0.612833
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=5723
+        Micro:		P@15=0.190767, R@15=0.386270, F1@15=0.240893
+        Macro:		P@15=0.190767, R@15=0.409781, F1@15=0.260338
+        			Bpref@15=0.714543, MRR@15=0.613083
+    NUS:
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=1055, Number of Correct=187
+        Micro:		P@5=0.177251, R@5=0.130969, F1@5=0.135707
+        Macro:		P@5=0.177251, R@5=0.112651, F1@5=0.137753
+        			Bpref@5=0.437441, MRR@5=0.385703
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=2110, Number of Correct=273
+        Micro:		P@10=0.129384, R@10=0.192779, F1@10=0.140172
+        Macro:		P@10=0.129384, R@10=0.164458, F1@10=0.144828
+        			Bpref@10=0.502986, MRR@10=0.398462
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=3165, Number of Correct=308
+        Micro:		P@15=0.097314, R@15=0.212220, F1@15=0.122306
+        Macro:		P@15=0.097314, R@15=0.185542, F1@15=0.127668
+        			Bpref@15=0.547230, MRR@15=0.399819
+    SemEval:
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=920, Number of Correct=214
+        Micro:		P@5=0.232609, R@5=0.113474, F1@5=0.148699
+        Macro:		P@5=0.232609, R@5=0.106151, F1@5=0.145777
+        			Bpref@5=0.519656, MRR@5=0.448913
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=1840, Number of Correct=321
+        Micro:		P@10=0.174457, R@10=0.171930, F1@10=0.168774
+        Macro:		P@10=0.174457, R@10=0.159226, F1@10=0.166494
+        			Bpref@10=0.622020, MRR@10=0.469188
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=2760, Number of Correct=367
+        Micro:		P@15=0.132971, R@15=0.195953, F1@15=0.154515
+        Macro:		P@15=0.132971, R@15=0.182044, F1@15=0.153685
+        			Bpref@15=0.654293, MRR@15=0.469188
 
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=920, Number of Correct=214
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Micro:		P@5=0.232609, R@5=0.113474, F1@5=0.148699
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Macro:		P@5=0.232609, R@5=0.106151, F1@5=0.145777
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=1840, Number of Correct=321
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Micro:		P@10=0.174457, R@10=0.171930, F1@10=0.168774
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Macro:		P@10=0.174457, R@10=0.159226, F1@10=0.166494
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=2760, Number of Correct=367
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Micro:		P@15=0.132971, R@15=0.195953, F1@15=0.154515
-01/01/2017 07:36:17 [INFO] keyphrase_copynet: Macro:		P@15=0.132971, R@15=0.182044, F1@15=0.153685
+    [3] Prediction, results get worse
+    change the config['sample_beam'] from 100 to voc_size(50000)
+    path: copynet-keyphrase-all.one2one.copy/predict.20170104-034205.len=8.beam=voc_size
+    params:
+        config['max_len']         = 8
+        config['sample_beam']     = voc_size
+        config['predict_type']    = 'extractive' # type of prediction, extractive or generative
+    INSPEC:
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=1881
+        Micro:		P@5=0.188100, R@5=0.125876, F1@5=0.140054
+        Macro:		P@5=0.188100, R@5=0.134684, F1@5=0.156972
+        			Bpref@5=0.460900, MRR@5=0.427975
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=2286
+        Micro:		P@10=0.114300, R@10=0.146992, F1@10=0.119830
+        Macro:		P@10=0.114300, R@10=0.163683, F1@10=0.134605
+        			Bpref@10=0.499803, MRR@10=0.431790
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=2389
+        Micro:		P@15=0.079633, R@15=0.151429, F1@15=0.097869
+        Macro:		P@15=0.079633, R@15=0.171058, F1@15=0.108675
+        			Bpref@15=0.521560, MRR@15=0.432001
+    NUS:
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=1055, Number of Correct=73
+        Micro:		P@5=0.069194, R@5=0.041593, F1@5=0.048531
+        Macro:		P@5=0.069194, R@5=0.043976, F1@5=0.053775
+        			Bpref@5=0.184518, MRR@5=0.139336
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=2110, Number of Correct=110
+        Micro:		P@10=0.052133, R@10=0.063652, F1@10=0.053526
+        Macro:		P@10=0.052133, R@10=0.066265, F1@10=0.058355
+        			Bpref@10=0.261848, MRR@10=0.153519
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=3165, Number of Correct=144
+        Micro:		P@15=0.045498, R@15=0.082897, F1@15=0.054857
+        Macro:		P@15=0.045498, R@15=0.086747, F1@15=0.059689
+        			Bpref@15=0.313060, MRR@15=0.160376
+    SemEval:
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=920, Number of Correct=110
+        Micro:		P@5=0.119565, R@5=0.053262, F1@5=0.072383
+        Macro:		P@5=0.119565, R@5=0.054563, F1@5=0.074932
+        			Bpref@5=0.325000, MRR@5=0.280344
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=1840, Number of Correct=191
+        Micro:		P@10=0.103804, R@10=0.094743, F1@10=0.096602
+        Macro:		P@10=0.103804, R@10=0.094742, F1@10=0.099066
+        			Bpref@10=0.425906, MRR@10=0.308491
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=2760, Number of Correct=243
+        Micro:		P@15=0.088043, R@15=0.119614, F1@15=0.098984
+        Macro:		P@15=0.088043, R@15=0.120536, F1@15=0.101759
+        			Bpref@15=0.490519, MRR@15=0.314062
 
     7. filter partial phrases, but if it appears very often, keep it (times>2)
 
@@ -194,6 +275,61 @@ Experiment
 
 
     Data: dataset/keyphrase/eos-punctuation-1000validation/
+
+    Validation Test:
+        1. epoch=1.batch=5000
+                ll=13.169633, 	 ppl=73.433609
+        2. epoch=2.batch=3000
+                ll=12.212568, 	 ppl=55.061333
+        3. epoch=2.batch=5000
+                ll=11.827076, 	 ppl=48.919415
+        4. epoch=3.batch=1000
+                ll=11.594496, 	 ppl=45.634624
+    Seems not fully converged.
+
+    path: keyphrase-all.one2one.nocopy/predict.20170103-015013
+    params:
+        config['max_len']         = 8
+        config['sample_beam']     = voc_size (50000)
+        config['predict_type']    = 'extractive' # type of prediction, extractive or generative
+    Log: experiments.keyphrase-all.one2one.nocopy.id=20170103-142855.log
+
+    INSPEC
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=10000, Number of Correct=2506
+        Micro:		P@5=0.250600, R@5=0.184546, F1@5=0.197035
+        Macro:		P@5=0.250600, R@5=0.179436, F1@5=0.209130
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=20000, Number of Correct=3359
+        Micro:		P@10=0.167950, R@10=0.231889, F1@10=0.181947
+        Macro:		P@10=0.167950, R@10=0.240513, F1@10=0.197786
+        --------------------------------------------------
+        Overall - extractive valid testing data=2000, Number of Target=13966/19275, Number of Prediction=30000, Number of Correct=3626
+        Micro:		P@15=0.120867, R@15=0.244167, F1@15=0.152128
+        Macro:		P@15=0.120867, R@15=0.259631, F1@15=0.164946
+    NUS
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=1055, Number of Correct=104
+        Micro:		P@5=0.098578, R@5=0.068597, F1@5=0.071614
+        Macro:		P@5=0.098578, R@5=0.062651, F1@5=0.076611
+        --------------------------------------------------
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=2110, Number of Correct=172
+        Micro:		P@10=0.081517, R@10=0.114929, F1@10=0.084151
+        Macro:		P@10=0.081517, R@10=0.103614, F1@10=0.091247
+        --------------------------------------------------
+        Overall - extractive valid testing data=211, Number of Target=1660/2461, Number of Prediction=3165, Number of Correct=225
+        Micro:		P@15=0.071090, R@15=0.145014, F1@15=0.086542
+        Macro:		P@15=0.071090, R@15=0.135542, F1@15=0.093264
+    SemEval
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=920, Number of Correct=126
+        Micro:		P@5=0.136957, R@5=0.063726, F1@5=0.084892
+        Macro:		P@5=0.136957, R@5=0.062500, F1@5=0.085831
+        --------------------------------------------------
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=1840, Number of Correct=203
+        Micro:		P@10=0.110326, R@10=0.102767, F1@10=0.103518
+        Macro:		P@10=0.110326, R@10=0.100694, F1@10=0.105290
+        --------------------------------------------------
+        Overall - extractive valid testing data=184, Number of Target=2016/2834, Number of Prediction=2760, Number of Correct=263
+        Micro:		P@15=0.095290, R@15=0.133539, F1@15=0.108259
+        Macro:		P@15=0.095290, R@15=0.130456, F1@15=0.110134
 
 
 new projection type methods for monotone lcp with finite termination <eos> the monotone linear complementarity problem ( lcp ) . <eos> the methods are a combination of the extragradient method and the newton method , in which the active set strategy is used and only one linear system of equations with lower dimension is solved at each iteration . <eos> it is shown that under the assumption of monotonicity , these two methods are globally and linearly convergent . <eos> furthermore , under a nondegeneracy condition they have a finite termination property . <eos> finally , the methods are extended to solving the monotone affine variational inequality problem

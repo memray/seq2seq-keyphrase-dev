@@ -109,3 +109,45 @@ def build_data(data, idx2word, word2idx):
             print B
             print C
     return instance
+
+def load_pairs(records, filter=False):
+    wordfreq = dict()
+    filtered_records = []
+    pairs = []
+
+    for id, record in enumerate(records):
+        text        = prepare_text(record, tokenize_sentence = False)
+        tokens      = get_tokens(text)
+        keyphrases  = process_keyphrase(record)
+
+        for w in tokens:
+            if w not in wordfreq:
+                wordfreq[w]  = 1
+            else:
+                wordfreq[w] += 1
+
+        for keyphrase in keyphrases:
+            for w in keyphrase:
+                if w not in wordfreq:
+                    wordfreq[w]  = 1
+                else:
+                    wordfreq[w] += 1
+
+        if id % 10000 == 0:
+            print('%d \n\t%s \n\t%s \n\t%s' % (id, text, tokens, keyphrases))
+
+        if sum([len(k) for k in keyphrases]) != 0:
+            ratio = float(len(record['keyword'])) / float(sum([len(k) for k in keyphrases]))
+        else:
+            ratio = 0
+        if ( filter and ratio < 3.5 ): # usually < 4.5 is noice
+            print('!' * 100)
+            print('Error found')
+            print('%d - title=%s, \n\ttext=%s, \n\tkeyphrase=%s \n\tkeyphrase after process=%s \n\tlen(keyphrase)=%d, #(tokens in keyphrase)=%d \n\tratio=%.3f' % (
+            id, record['title'], record['abstract'], record['keyword'], keyphrases, len(record['keyword']), sum([len(k) for k in keyphrases]), ratio))
+            continue
+
+        pairs.append((tokens, keyphrases))
+        filtered_records.append(record)
+
+    return filtered_records, pairs, wordfreq

@@ -183,7 +183,12 @@ if __name__ == '__main__':
     n_rng   = np.random.RandomState(config['seed'])
     np.random.seed(config['seed'])
     rng     = RandomStreams(n_rng.randint(2 ** 30))
-    logger.info('Start!')
+
+    logger.info('*'*20 + '  config information  ' + '*'*20)
+    # print config information
+    for k,v in config.items():
+        logger.info("\t\t\t\t%s : %s" % (k,v))
+    logger.info('*' * 50)
 
     train_set, validation_set, test_sets, idx2word, word2idx = deserialize_from_file(config['dataset'])
     # test_set = load_additional_testing_data(config['path']+'/dataset/keyphrase/ir-books/expert-conflict-free.json', idx2word, word2idx)
@@ -239,6 +244,12 @@ if __name__ == '__main__':
     agent.compile_('all')
     logger.info('compile ok.')
 
+    # load pre-trained model
+    if config['trained_model']:
+        logger.info('Trained model exists, loading from %s' % config['trained_model'])
+        agent.load(config['trained_model'])
+        # agent.save_weight_json(config['weight_json'])
+
     epoch   = 0
     epochs = 10
     valid_param = {}
@@ -276,15 +287,8 @@ if __name__ == '__main__':
             batch_start = 0
 
             if config['resume_training'] and epoch == 1:
-                # load pre-trained model
-                if config['trained_model']:
-                    logger.info('Loading trained model from %s' % config['trained_model'])
-                    agent.load(config['trained_model'])
-                    # agent.save_weight_json(config['weight_json'])
-
-                logger.info('Loading saved training status from %s' % config['training_archive'])
                 name_ordering, batch_id, loss, valid_param, optimizer_config = deserialize_from_file(config['training_archive'])
-                batch_start = batch_id + 1
+                batch_start += 1
 
                 optimizer_config['rng'] = agent.rng
                 optimizer_config['save'] = False
@@ -309,35 +313,36 @@ if __name__ == '__main__':
                 # if not multi_output, split one data (with multiple targets) into multiple ones
                 if not config['multi_output']:
                     data_s, data_t = split_into_multiple_and_padding(data_s, data_t)
-                # validate whether add one unk to the end
-                loss_batch = []
 
                 # 2. Training
                 #       split into smaller batches, as some samples contains too many outputs, lead to out-of-memory  9195998617
                 # for minibatch_id in range(int(math.ceil(len(data_s)/config['mini_batch_size']))):
                 #     mini_data_s = data_s[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_s))]
                 #     mini_data_t = data_t[minibatch_id * config['mini_batch_size']:min((minibatch_id + 1) * config['mini_batch_size'], len(data_t))]
-                dd = 0
-                max_size = 250000
-                stack_size = 0
-                mini_data_s = []
-                mini_data_t = []
-                while dd < len(data_s):
-                    while dd < len(data_s) and stack_size + len(data_s[dd]) * len(data_t[dd]) < max_size:
-                        mini_data_s.append(data_s[dd])
-                        mini_data_t.append(data_t[dd])
-                        stack_size += len(data_s[dd]) * len(data_t[dd])
-                        dd += 1
-                    mini_data_s = np.asarray(mini_data_s)
-                    mini_data_t = np.asarray(mini_data_t)
 
-                    if config['copynet']:
-                        data_c = cc_martix(mini_data_s, mini_data_t)
-                         # data_c = prepare_batch(batch, 'target_c', data_t.shape[1])
-                        loss_batch += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
-                        # loss += [agent.train_guard(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
-                    else:
-                        loss_batch += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
+                if not do_validate:
+                    loss_batch = []
+                    dd = 0
+                    max_size = 300000
+                    stack_size = 0
+                    mini_data_s = []
+                    mini_data_t = []
+                    while dd < len(data_s):
+                        while dd < len(data_s) and stack_size + len(data_s[dd]) * len(data_t[dd]) < max_size:
+                            mini_data_s.append(data_s[dd])
+                            mini_data_t.append(data_t[dd])
+                            stack_size += len(data_s[dd]) * len(data_t[dd])
+                            dd += 1
+                        mini_data_s = np.asarray(mini_data_s)
+                        mini_data_t = np.asarray(mini_data_t)
+
+                        if config['copynet']:
+                            data_c = cc_martix(mini_data_s, mini_data_t)
+                             # data_c = prepare_batch(batch, 'target_c', data_t.shape[1])
+                            loss_batch += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
+                            # loss += [agent.train_guard(unk_filter(mini_data_s), unk_filter(mini_data_t), data_c)]
+                        else:
+                            loss_batch += [agent.train_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
 
                     mini_data_s = []
                     mini_data_t = []
@@ -349,6 +354,7 @@ if __name__ == '__main__':
                 # print progress
                 progbar.update(batch_id, [('loss_reg', loss[-1][0]),
                                           ('ppl.', loss[-1][1])])
+
                 # 3. Quick testing
                 if batch_id % 200 == 0 and batch_id > 1:
                     print_case = '-' * 100 +'\n'
@@ -444,12 +450,9 @@ if __name__ == '__main__':
                         mini_data_t = []
                         stack_size = 0
 
-                    # print(len(loss_valid))
-                    # print(len(loss_valid[0]))
-                    # print(loss_valid[0])
-                    mean_ll = np.average(np.concatenate([l[0] for l in loss_valid]))
-                    mean_ppl = np.average(np.concatenate([l[1] for l in loss_valid]))
-                    logger.info('\tPrevious best score: \t ll=%f, \t ppl=%f' % (valid_param['valid_best_score'][0], valid_param['valid_best_score'][1]))
+                    mean_ll = np.average([l[0] for l in loss_valid])
+                    mean_ppl = np.average([l[1] for l in loss_valid])
+                    logger.info('\tPrevious best score: \t ll=%f, \t ppl=%f' % (valid_best_score[0], valid_best_score[1]))
                     logger.info('\tCurrent score: \t ll=%f, \t ppl=%f' % (mean_ll, mean_ppl))
 
                     if mean_ll < valid_param['valid_best_score'][0]:
@@ -535,47 +538,15 @@ if __name__ == '__main__':
                 test_s_list, test_t_list, test_s_o_list, test_t_o_list, predictions, scores, idx2word = deserialize_from_file(config['predict_path']+'predict.{0}.{1}.pkl'.format(config['predict_type'], dataset_name))
 
                 print_test.write('Testing on %s size=%d @ epoch=%d \n' % (dataset_name, test_size, epoch))
-                overall_score = {'p':0.0, 'r':0.0, 'f1':0.0}
                 # load from predicted result
                 # Evaluation
-                outs, metrics = keyphrase_utils.evaluate_multiple(config, test_s_list, test_t_list,
+                outs, overall_score = keyphrase_utils.evaluate_multiple(config, test_s_list, test_t_list,
                                                             test_s_o_list, test_t_o_list,
                                                             predictions, scores, idx2word)
 
                 print_test.write(' '.join(outs))
+                print_test.write(' '.join(['%s : %s' % (str(k), str(v)) for k,v in overall_score.items()]))
                 logger.info('*' * 50)
-
-                real_test_size = sum([1 if m['target_number'] > 0 else 0 for m in metrics])
-
-                for k in [5,10,15]:
-                    # Get the Micro Measures
-                    overall_score['p@%d' % k] = float(sum([m['p@%d' % k] for m in metrics]))/float(real_test_size)
-                    overall_score['r@%d' % k] = float(sum([m['r@%d' % k] for m in metrics]))/float(real_test_size)
-                    overall_score['f1@%d' % k] = float(sum([m['f1@%d' % k] for m in metrics]))/float(real_test_size)
-
-                    # Get the Macro Measures
-                    correct_number = sum([m['correct_number@%d' % k] for m in metrics])
-                    valid_target_number = sum([m['valid_target_number'] for m in metrics])
-                    target_number = sum([m['target_number'] for m in metrics])
-                    overall_score['macro_p@%d' % k]  = correct_number / float(real_test_size * k)
-                    overall_score['macro_r@%d' % k]  = correct_number / float(valid_target_number)
-                    if overall_score['macro_p@%d' % k] + overall_score['macro_r@%d' % k] > 0:
-                        overall_score['macro_f1@%d' % k] = 2 * overall_score['macro_p@%d' % k] * overall_score['macro_r@%d' % k] / float(overall_score['macro_p@%d' % k] + overall_score['macro_r@%d' % k])
-                    else:
-                        overall_score['macro_f1@%d' % k] = 0
-
-                    str = 'Overall - %s valid testing data=%d, Number of Target=%d/%d, Number of Prediction=%d, Number of Correct=%d' % (config['predict_type'], real_test_size, valid_target_number, target_number, real_test_size * k, correct_number)
-                    logger.info(str)
-                    print_test.write(str)
-                    str = 'Micro:\t\tP@%d=%f, R@%d=%f, F1@%d=%f' % (k, overall_score['p@%d' % k], k, overall_score['r@%d' % k], k, overall_score['f1@%d' % k])
-                    logger.info(str)
-                    print_test.write(str)
-
-                    str = 'Macro:\t\tP@%d=%f, R@%d=%f, F1@%d=%f' % (k, overall_score['macro_p@%d' % k], k, overall_score['macro_r@%d' % k], k, overall_score['macro_f1@%d' % k])
-                    logger.info(str)
-                    print_test.write(str)
-
-                    print('-' * 50)
 
                 logger.info(overall_score)
                 print_test.close()
