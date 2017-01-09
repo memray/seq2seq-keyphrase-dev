@@ -239,15 +239,10 @@ if __name__ == '__main__':
     agent.compile_('all')
     logger.info('compile ok.')
 
-    # load pre-trained model
-    if config['trained_model']:
-        logger.info('Trained model exists, loading from %s' % config['trained_model'])
-        agent.load(config['trained_model'])
-        # agent.save_weight_json(config['weight_json'])
-
     epoch   = 0
     epochs = 10
     valid_param = {}
+    valid_param['early_stop'] = False
     valid_param['valid_best_score'] = (float(sys.maxint),float(sys.maxint))
     valid_param['valids_not_improved'] = 0
     valid_param['patience']            = 3
@@ -268,6 +263,9 @@ if __name__ == '__main__':
         if do_train:
             # train_batches = output_stream(train_data, config['batch_size']).get_epoch_iterator(as_dict=True)
 
+            if valid_param['early_stop']:
+                break
+
             logger.info('\nEpoch = {} -> Training Set Learning...'.format(epoch))
             progbar = Progbar(train_size / config['batch_size'], logger)
 
@@ -278,10 +276,26 @@ if __name__ == '__main__':
             batch_start = 0
 
             if config['resume_training'] and epoch == 1:
-                name_ordering, batch_id, loss, valid_param, optimizer_config = deserialize_from_file(config['training_archive'])
-                batch_start += 1
+                # load pre-trained model
+                if config['trained_model']:
+                    logger.info('Loading trained model from %s' % config['trained_model'])
+                    agent.load(config['trained_model'])
+                    # agent.save_weight_json(config['weight_json'])
 
-                agent.optimizer = optimizers.get(config['optimizer'], kwargs=dict(rng=agent.rng, save=False, clipnorm=config['clipnorm']).update(optimizer_config))
+                logger.info('Loading saved training status from %s' % config['training_archive'])
+                name_ordering, batch_id, loss, valid_param, optimizer_config = deserialize_from_file(config['training_archive'])
+                batch_start = batch_id + 1
+
+                optimizer_config['rng'] = agent.rng
+                optimizer_config['save'] = False
+                optimizer_config['clipnorm'] = config['clipnorm']
+                print('optimizer_config: %s' % str(optimizer_config))
+                # agent.optimizer = optimizers.get(config['optimizer'], kwargs=optimizer_config)
+                agent.optimizer.iterations.set_value(optimizer_config['iterations'])
+                agent.optimizer.lr.set_value(optimizer_config['lr'])
+                agent.optimizer.beta_1 = optimizer_config['beta_1']
+                agent.optimizer.beta_2 = optimizer_config['beta_2']
+                agent.optimizer.clipnorm = optimizer_config['clipnorm']
                 # batch_start = 40001
 
             for batch_id in range(batch_start, num_batches):
@@ -384,7 +398,7 @@ if __name__ == '__main__':
                         print_case_file.write(print_case)
 
                 # 4. Evaluate on validation data, and do early-stopping
-                if batch_id % 2 == 0 and not (batch_id==0 and epoch==1):
+                if batch_id % 1000 == 0 and not (batch_id==0 and epoch==1):
                     logger.info('Validate @ epoch=%d, batch=%d' % (epoch, batch_id))
                     # 1. Prepare data
                     data_s = np.array(validation_set['source'])
@@ -423,9 +437,8 @@ if __name__ == '__main__':
                         else:
                             loss_valid += [agent.validate_(unk_filter(mini_data_s), unk_filter(mini_data_t))]
 
-                        if dd % 10 == 0:
+                        if dd % 100 == 0:
                             print('\t %d / %d' % (dd, math.ceil(len(data_s))))
-                            break
 
                         mini_data_s = []
                         mini_data_t = []
@@ -448,18 +461,20 @@ if __name__ == '__main__':
                         logger.info('Not improved for %s tests.' % valid_param['valids_not_improved'])
 
                 # 5. Save model
-                if batch_id % 2 == 0 and batch_id > 1:
+                if batch_id % 500 == 0 and batch_id > 1:
                     # save the weights every K rounds
                     agent.save(config['path_experiment'] + '/experiments.{0}.id={1}.epoch={2}.batch={3}.pkl'.format(config['task_name'], config['timemark'], epoch, batch_id))
 
                     # save the game(training progress) in case of interrupt!
                     optimizer_config = agent.optimizer.get_config()
                     serialize_to_file([name_ordering, batch_id, loss, valid_param, optimizer_config], config['path_experiment'] + '/save_training_status.id={0}.epoch={1}.batch={2}.pkl'.format(config['timemark'], epoch, batch_id))
+                    print(optimizer_config)
                     # agent.save_weight_json(config['path_experiment'] + '/weight.print.id={0}.epoch={1}.batch={2}.json'.format(config['timemark'], epoch, batch_id))
 
                 # 6. Stop if exceed patience
                 if valid_param['valids_not_improved']  >= valid_param['patience']:
-                    print("Not improved for %s epochs. Stopping..." % valid_param['patience'])
+                    print("Not improved for %s epochs. Stopping..." % valid_param['valids_not_improved'])
+                    valid_param['early_stop'] = True
                     break
 
         '''

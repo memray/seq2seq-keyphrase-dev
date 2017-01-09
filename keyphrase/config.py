@@ -48,14 +48,14 @@ def setup_keyphrase_all():
         os.mkdir(config['path_log'])
 
     # trained_model
-    config['trained_model']   =  None #config['path_experiment'] + '/experiments.keyphrase-all.one2one.copy.id=20170104-043128.epoch=1.batch=3000.pkl'
+    config['resume_training'] = False
+    config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.copy.id=20170106-013851.epoch=1.batch=2.pkl'
     # A well-trained model on all data
     #   path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy.<eol><digit>.emb=100.hid=150/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     # A well-trained model on acm data
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     config['weight_json']= config['path_experiment'] + '/model_weight.json'
-    config['resume_training'] = False
-    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20170104-043128.epoch=1.batch=3000.pkl'
+    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20170106-013851.epoch=1.batch=2.pkl'
         #config['path_experiment'] + '/save_training_status.pkl'
 
     # # output hdf5 file.
@@ -195,14 +195,14 @@ def setup_keyphrase_all_testing():
         os.mkdir(config['path_log'])
 
     # trained_model
-    config['trained_model']   = config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
+    config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.copy.id=20170106-013851.epoch=1.batch=2.pkl'
     # A well-trained model on all data
     #   path.realpath(path.curdir) + '/Experiment/' + 'copynet-keyphrase-all.one2one.nocopy.<eol><digit>.emb=100.hid=150/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     # A well-trained model on acm data
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.nocopy.id=20161129-195005.epoch=2.pkl'
     config['weight_json']= config['path_experiment'] + '/model_weight.json'
-    config['resume_training'] = False
-    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20161220-070035.epoch=2.batch=20000.pkl'
+    config['resume_training'] = True
+    config['training_archive']= config['path_experiment'] + '/save_training_status.id=20170106-013851.epoch=1.batch=2.pkl'
         #config['path_experiment'] + '/save_training_status.pkl'
 
     # # output hdf5 file.
