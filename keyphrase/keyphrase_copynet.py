@@ -492,7 +492,6 @@ if __name__ == '__main__':
                 # print(dataset_name)
                 # print('Avg length=%d, Max length=%d' % (np.average([len(s) for s in test_set['source']]), np.max([len(s) for s in test_set['source']])))
                 test_data_plain = zip(*(test_set['source'], test_set['target']))
-
                 test_size = len(test_data_plain)
 
                 progbar_test = Progbar(test_size, logger)
