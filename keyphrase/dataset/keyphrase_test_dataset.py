@@ -19,7 +19,7 @@ from keyphrase.dataset.dataset_utils import build_data, load_pairs
 from emolga.utils.generic_utils import get_from_module
 
 import dataset_utils as utils
-from keyphrase.config import setup_keyphrase_all, setup_keyphrase_all_testing
+from keyphrase.config import setup_keyphrase_all
 from emolga.dataset.build_dataset import deserialize_from_file, serialize_to_file
 import numpy as np
 

@@ -194,6 +194,9 @@ if __name__ == '__main__':
     train_set, validation_set, test_sets, idx2word, word2idx = deserialize_from_file(config['dataset'])
     test_sets = keyphrase_test_dataset.load_additional_testing_data(config['testing_datasets'], idx2word, word2idx, config)
 
+    print(len(train_set['target']))
+    print(sum([len(t) for t in train_set['target']]))
+
     logger.info('Load data done.')
     # data is too large to dump into file, so load from raw dataset directly
     # train_set, test_set, idx2word, word2idx = keyphrase_dataset.load_data_and_dict(config['training_dataset'], config['testing_dataset'])
@@ -494,6 +497,11 @@ if __name__ == '__main__':
                 test_data_plain = zip(*(test_set['source'], test_set['target']))
                 test_size = len(test_data_plain)
 
+                # keep the first 400 in krapivin
+                if dataset_name == 'krapivin':
+                    test_data_plain = test_data_plain[:400]
+                    test_size = len(test_data_plain)
+
                 progbar_test = Progbar(test_size, logger)
                 logger.info('Predicting on %s' % dataset_name)
 
@@ -539,14 +547,17 @@ if __name__ == '__main__':
 
                 # keep the first 400 in krapivin
                 if dataset_name == 'krapivin':
-                    for v in test_set.values():
-                        v           = v[:400]
+                    new_test_set = {}
+                    for k,v in test_set.items():
+                        new_test_set[k]  = v[:400]
                     test_s_list     = test_s_list[:400]
                     test_t_list     = test_t_list[:400]
                     test_s_o_list   = test_s_o_list[:400]
                     test_t_o_list   = test_t_o_list[:400]
                     predictions     = predictions[:400]
                     scores          = scores[:400]
+
+                    test_set = new_test_set
 
                 print_test.write('Evaluating on %s size=%d @ epoch=%d \n' % (dataset_name, test_size, epoch))
                 logger.info('Evaluating on %s size=%d @ epoch=%d \n' % (dataset_name, test_size, epoch))
@@ -558,7 +569,8 @@ if __name__ == '__main__':
                 # Evaluation
                 outs, overall_score = keyphrase_utils.evaluate_multiple(config, test_set, test_s_list, test_t_list,
                                                             test_s_o_list, test_t_o_list,
-                                                            predictions, scores, idx2word, do_stem)
+                                                            predictions, scores, idx2word, do_stem,
+                                                            model_name=config['task_name'], dataset_name=dataset_name)
 
                 print_test.write(' '.join(outs))
                 print_test.write(' '.join(['%s : %s' % (str(k), str(v)) for k,v in overall_score.items()]))
@@ -567,6 +579,7 @@ if __name__ == '__main__':
                 logger.info(overall_score)
                 print_test.close()
 
+            exit()
             # write examples to log file
             # # test accuracy
             # progbar_tr = Progbar(2000)

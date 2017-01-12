@@ -19,7 +19,8 @@ def cut_zero(sample, idx2word):
 
 def evaluate_multiple(config, test_set, inputs, outputs,
                       original_input, original_outputs,
-                      samples, scores, idx2word, do_stem):
+                      samples, scores, idx2word, do_stem,
+                      model_name, dataset_name):
     '''
     inputs_unk is same as inputs except for filtered out all the low-freq words to 1 (<unk>)
     return the top few keywords, number is set in config
@@ -39,12 +40,17 @@ def evaluate_multiple(config, test_set, inputs, outputs,
     outs = []
     micro_metrics = []
     micro_matches = []
+    predict_scores = []
 
     # load stopword
     with open(config['path'] + '/dataset/stopword/stopword_en.txt') as stopword_file:
         stopword_set = set([stemmer.stem(w.strip()) for w in stopword_file])
 
     postag_lists = [[s[1] for s in d] for d in test_set['tagged_source']]
+
+    # reload the targets from corpus directly
+    # target_dir = config['baseline_data_path'] + dataset_name + '/keyphrase/'
+
     # for input_sentence, target_list, predict_list, score_list in zip(inputs, original_outputs, samples, scores):
     for source_str, input_sentence, target_list, predict_list, score_list, postag_list in zip(test_set['source_str'], inputs, test_set['target_str'], samples, scores, postag_lists):
 
@@ -53,7 +59,7 @@ def evaluate_multiple(config, test_set, inputs, outputs,
         '''
         target_outputs = []
         predict_outputs = []
-        predict_scores = []
+        predict_score = []
         predict_set = set()
         correctly_matched = np.asarray([0] * max(len(target_list), len(predict_list)), dtype='int32')
 
@@ -184,7 +190,7 @@ def evaluate_multiple(config, test_set, inputs, outputs,
                 continue
 
             predict_outputs.append(predict)
-            predict_scores.append(score)
+            predict_score.append(score)
             predict_set.add(key)
 
         # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
@@ -213,7 +219,7 @@ def evaluate_multiple(config, test_set, inputs, outputs,
                         break
 
             predict_outputs = np.delete(predict_outputs, match_phrase_index)
-            predict_scores  = np.delete(predict_scores, match_phrase_index)
+            predict_score  = np.delete(predict_score, match_phrase_index)
 
         # check whether the predicted phrase is correct (match any groundtruth)
         for p_id, predict in enumerate(predict_outputs):
@@ -229,14 +235,14 @@ def evaluate_multiple(config, test_set, inputs, outputs,
 
 
         predict_outputs = np.asarray(predict_outputs)
-        predict_scores = np.asarray(predict_scores)
+        predict_score = np.asarray(predict_score)
         # normalize the score?
         if config['normalize_score']:
-            predict_scores = np.asarray(
-                [math.log(math.exp(score) / len(predict)) for predict, score in zip(predict_outputs, predict_scores)])
-            score_list_index = np.argsort(predict_scores)
+            predict_score = np.asarray(
+                [math.log(math.exp(score) / len(predict)) for predict, score in zip(predict_outputs, predict_score)])
+            score_list_index = np.argsort(predict_score)
             predict_outputs = predict_outputs[score_list_index]
-            predict_scores = predict_scores[score_list_index]
+            predict_score = predict_score[score_list_index]
             correctly_matched = correctly_matched[score_list_index]
 
         metric_dict = {}
@@ -291,6 +297,7 @@ def evaluate_multiple(config, test_set, inputs, outputs,
 
         micro_metrics.append(metric_dict)
         micro_matches.append(correctly_matched)
+        predict_scores.append(predict_score)
 
         '''
         Print information on each prediction
@@ -306,7 +313,7 @@ def evaluate_multiple(config, test_set, inputs, outputs,
         logger.info(b)
         b += '\n'
         c = '[DECODE]: %d/%d predictions' % (len(predict_outputs), len(predict_list))
-        for id, (predict, score) in enumerate(zip(predict_outputs, predict_scores)):
+        for id, (predict, score) in enumerate(zip(predict_outputs, predict_score)):
             c += ('\n\t\t[%.3f][%d][%d]' % (score, len(predict), sum([len(w) for w in predict]))) + ' '.join(predict)
             if correctly_matched[id] == 1:
                 c += ' [correct!]'
@@ -340,6 +347,8 @@ def evaluate_multiple(config, test_set, inputs, outputs,
     '''
     Compute the corpus evaluation
     '''
+    logger.info('Experiment result: %s' % (config['predict_path'] + '/' + model_name+'-'+dataset_name+'.txt'))
+    csv_writer = open(config['predict_path'] + '/' + model_name+'-'+dataset_name+'.txt', 'w')
     overall_score = {}
     for k in [5, 10, 15]:
         correct_number = sum([m['correct_number@%d' % k] for m in micro_metrics])
@@ -365,6 +374,12 @@ def evaluate_multiple(config, test_set, inputs, outputs,
         )
         outs.append(output_str+'\n')
         logger.info(output_str)
+        csv_writer.write('Micro@%d, %f, %f, %f\n' % (
+                    k,
+                    overall_score['p@%d' % k],
+                    overall_score['r@%d' % k],
+                    overall_score['f1@%d' % k]
+        ))
 
         # Compute the Macro Measures
         overall_score['macro_p@%d' % k] = correct_number / float(real_test_size * k)
@@ -382,6 +397,12 @@ def evaluate_multiple(config, test_set, inputs, outputs,
         )
         outs.append(output_str+'\n')
         logger.info(output_str)
+        csv_writer.write('Macro@%d, %f, %f, %f\n' % (
+                    k,
+                    overall_score['macro_p@%d' % k],
+                    overall_score['macro_r@%d' % k],
+                    overall_score['macro_f1@%d' % k]
+        ))
 
         # Compute the binary preference measure (Bpref)
         overall_score['bpref@%d' % k] = float(sum([m['bpref@%d' % k] for m in micro_metrics])) / float(real_test_size)
@@ -395,5 +416,40 @@ def evaluate_multiple(config, test_set, inputs, outputs,
         )
         outs.append(output_str+'\n')
         logger.info(output_str)
+
+    # evaluate the score cutoff
+
+    for cutoff in range(15):
+        overall_predicted_number    = 0
+        overall_correct_number      = 0
+        overall_target_number       = sum([m['target_number'] for m in micro_metrics])
+
+        for score_list, metric_dict, correctly_matched in zip(predict_scores, micro_metrics, micro_matches):
+            predicted_number            = len(filter(lambda s:s < cutoff, score_list))
+            overall_predicted_number    += predicted_number
+            overall_correct_number      += sum(correctly_matched[:predicted_number])
+
+        if overall_predicted_number > 0:
+            macro_p = float(overall_correct_number) / float(overall_predicted_number)
+        else:
+            macro_p = 0
+        macro_r = float(overall_correct_number) / float(overall_target_number)
+
+        if macro_p + macro_r > 0:
+            macro_f1 = 2. * macro_p * macro_r / (macro_p + macro_r)
+        else:
+            macro_f1 = 0
+
+        logger.info('Macro,cutoff@%d, correct_number=%d, predicted_number=%d, target_number=%d, p=%f, r=%f, f1=%f' % (
+                    cutoff,
+                    overall_correct_number, overall_predicted_number, overall_target_number,
+                    macro_p, macro_r, macro_f1
+        ))
+        csv_writer.write('Macro,cutoff@%d, %f, %f, %f\n' % (
+                    cutoff, macro_p, macro_r, macro_f1
+        ))
+
+
+    csv_writer.close()
 
     return outs, overall_score
