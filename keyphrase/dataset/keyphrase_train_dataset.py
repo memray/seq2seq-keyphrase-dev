@@ -124,23 +124,32 @@ def load_data_and_dict(training_dataset):
 
     return train_set, validation_set, test_set, idx2word, word2idx
 
+
+
 if __name__ == '__main__':
     # config = config.setup_keyphrase_all()
     config = setup_keyphrase_all()
 
     start_time = time.clock()
-    train_set, validation_set, test_set, idx2word, word2idx = load_data_and_dict(config['training_dataset'])
-    serialize_to_file([train_set, validation_set, test_set, idx2word, word2idx], config['dataset'])
+    # train_set, validation_set, test_set, idx2word, word2idx = load_data_and_dict(config['training_dataset'])
+    # serialize_to_file([train_set, validation_set, test_set, idx2word, word2idx], config['dataset'])
     print('Finish processing and dumping: %d seconds' % (time.clock()-start_time))
+
+
+
+
     #
     # # export vocabulary to file for manual check
     # wordfreq = sorted(wordfreq.items(), key=lambda a: a[1], reverse=True)
     # serialize_to_file(wordfreq, config['voc'])
-
+    wordfreq = deserialize_from_file(config['voc'])
+    with open(config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'/voc_list.txt', 'w') as f_:
+        for (k,f) in wordfreq:
+            f_.write('%s\t%d\n' % (k,f))
 
     # train_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
     # print('Load successful: vocsize=%d'% len(idx2word))
-
+    #
     # count_dict = {}
     #
     # for d in train_set['target']:

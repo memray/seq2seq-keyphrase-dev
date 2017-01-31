@@ -10,6 +10,7 @@ def setup_keyphrase_all():
     # config['seed']            = 3030029828
     config['seed']            = 154316847
     # config['task_name']       = 'keyphrase-all.one2one.copy'
+    # config['task_name']       = 'keyphrase-all.one2one.nocopy'
     config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
     config['timemark']        = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time()))
 
@@ -30,8 +31,8 @@ def setup_keyphrase_all():
     # do training?
     config['do_train']        = False
     # do predicting?
-    # config['do_predict']      = True
-    config['do_predict']      = False
+    config['do_predict']      = True
+    # config['do_predict']      = False
     # do testing?
     config['do_evaluate']     = True
     # config['do_evaluate']     = False
@@ -68,6 +69,7 @@ def setup_keyphrase_all():
     # trained_model
     # config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.copy.id=20170106-025508.epoch=4.batch=1000.pkl'
     config['trained_model']   = config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
+    # config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.nocopy.id=20161230-000056.epoch=3.batch=1000.pkl'
     # A copy-model
     # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
     # A well-trained no-copy model
@@ -87,13 +89,13 @@ def setup_keyphrase_all():
     #     os.mkdir(config['weights_file'])
 
     config['max_len']         = 6
-    config['sample_beam']     = 20 #config['voc_size']
+    config['sample_beam']     = 200 #config['voc_size']
     config['sample_stoch']    = False # use beamsearch
     config['sample_argmax']   = False
 
     config['predict_type']    = 'extractive' # type of prediction, extractive or generative
-    # config['predict_path']    = config['path_experiment'] + '/predict.' + config['timemark'] + '.data=4.len=6.beam=20.predict=appear_only/'
-    config['predict_path']    = config['path_experiment'] + '/predict.20170108-041052.data=4.len=6.beam=all.predict=appear_only/'
+    config['predict_path']    = config['path_experiment'] + '/predict.' + config['timemark'] + '.data=4.len=6.beam='+str(config['sample_beam'])+'.predict=ngram.target=all.keeplongest=1/'
+    # config['predict_path']    = config['path_experiment'] + '/predict.20170108-041052.data=4.len=6.beam=50.predict=appear_only/'
                                 # config['path_experiment'] + '/predict.20161231-152451.len=6.beam=200.target=appear_only/'
                                 # '/copynet-keyphrase-all.one2one.nocopy.extractive.predict.pkl'
     if not os.path.exists(config['predict_path']):
@@ -109,8 +111,8 @@ def setup_keyphrase_all():
     config['normalize_score']   = True #
     # config['normalize_score']   = True
     config['target_filter']     = None # 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
-    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
-    config['keep_longest']      = False # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
+    config['predict_filter']    = None # whether do filtering on predictions? 'appear-only','non-appear-only' and None
+    config['keep_longest']      = True # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
     config['noun_phrase_only']  = False
     # config['noun_phrase_only']  = True
 
@@ -135,6 +137,7 @@ def setup_keyphrase_all():
 
     # Decoder: CopyNet
     config['copynet']         = True
+    # config['copynet']         = False
     config['identity']        = False
     config['location_embed']  = True
     config['coverage']        = True
@@ -262,7 +265,7 @@ def setup_keyphrase_baseline():
     config['sample_argmax']   = False
 
     config['predict_type']    = 'extractive' # type of prediction, extractive or generative
-    config['predict_path']    = config['path_experiment'] + '/predict.20170108-041052.data=4.len=6.beam=all.predict=appear_only/'
+    config['predict_path']    = config['path_experiment'] + '/predict.20170108-041052.data=4.len=6.beam=all.predict=ngram.target=all.keeplongest=false/'
                                 # config['path_experiment'] + '/predict.20161231-152451.len=6.beam=200.target=appear_only/'
                                 # '/copynet-keyphrase-all.one2one.nocopy.extractive.predict.pkl'
     if not os.path.exists(config['predict_path']):
@@ -277,10 +280,10 @@ def setup_keyphrase_baseline():
 
     config['normalize_score']   = True #
     # config['normalize_score']   = True
+    config['predict_filter']    = 'appear-only' # [USELESS]whether do filtering on predictions? 'appear-only','non-appear-only' and None
     config['target_filter']     = None # 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
-    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
     config['keep_longest']      = False # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
-    config['noun_phrase_only']  = True
+    config['noun_phrase_only']  = False
 
     config['number_to_predict'] = 10 # [desperated] the k in P@k,R@k,F1@k
 

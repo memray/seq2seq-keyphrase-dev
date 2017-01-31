@@ -1401,6 +1401,8 @@ class DecoderAtt(Decoder):
                             '''
                             if new_hyp_samples[idx][-1] not in input_set:
                                 continue
+
+                            # TODO something wrong here
                             if '-'.join([str(s) for s in new_hyp_samples[idx]]) not in sequence_set:
                                 continue
 
@@ -1423,8 +1425,9 @@ class DecoderAtt(Decoder):
                 '''
                 previous_word = np.array([w[-1] for w in hyp_samples])
                 previous_state = np.array(hyp_states)
+                pass
 
-            pass
+            logger.info('\t Depth=%d, get %d outputs' % (ii, len(sample)))
 
         # end.
         if not stochastic:
@@ -1946,7 +1949,7 @@ class NRM(Model):
 
         return sample, np.exp(score)
 
-    def generate_multiple(self, inputs, mode='display', return_all=True):
+    def generate_multiple(self, inputs, mode='display', return_all=True, all_ngram=True):
         '''
         Generate output sequence
         '''

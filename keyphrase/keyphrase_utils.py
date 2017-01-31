@@ -198,6 +198,7 @@ def evaluate_multiple(config, test_set, inputs, outputs,
             match_phrase_index = []
 
             for ii, p_ii in enumerate(predict_outputs): # shorter one
+                match_times = 0
                 for jj, p_jj in enumerate(predict_outputs): # longer one
                     if ii==jj or len(p_ii)>=len(p_jj): # p_jj must be longer than p_ii
                         continue
@@ -211,12 +212,11 @@ def evaluate_multiple(config, test_set, inputs, outputs,
                                 break
                         if w_index == len(p_ii) - 1 and match == None:
                             match = True
-                            break
-                    if match: # p_ii is part of p_jj, discard
-                        match_phrase_index.append(ii)
-                        # print("Matched pair: %s \t - \t %s" % (str(p_ii), str(p_jj)))
-                        # pass
-                        break
+                            match_times += 1
+                if match_times == 1: # p_ii is part of p_jj, discard
+                    match_phrase_index.append(ii)
+                    # print("Matched pair: %s \t - \t %s" % (str(p_ii), str(p_jj)))
+                    # pass
 
             predict_outputs = np.delete(predict_outputs, match_phrase_index)
             predict_score  = np.delete(predict_score, match_phrase_index)
