@@ -240,23 +240,24 @@ if __name__ == '__main__':
     ts_idx            = n_rng.permutation(test_size )[:2000].tolist()
     logger.info('load the data ok.')
 
-    # build the agent
-    if config['copynet']:
-        agent = NRM(config, n_rng, rng, mode=config['mode'],
-                     use_attention=True, copynet=config['copynet'], identity=config['identity'])
-    else:
-        agent = NRM0(config, n_rng, rng, mode=config['mode'],
-                      use_attention=True, copynet=config['copynet'], identity=config['identity'])
+    if config['do_train'] or config['do_predict']:
+        # build the agent
+        if config['copynet']:
+            agent = NRM(config, n_rng, rng, mode=config['mode'],
+                         use_attention=True, copynet=config['copynet'], identity=config['identity'])
+        else:
+            agent = NRM0(config, n_rng, rng, mode=config['mode'],
+                          use_attention=True, copynet=config['copynet'], identity=config['identity'])
 
-    agent.build_()
-    agent.compile_('all')
-    logger.info('compile ok.')
+        agent.build_()
+        agent.compile_('all')
+        logger.info('compile ok.')
 
-    # load pre-trained model
-    if config['trained_model']:
-        logger.info('Trained model exists, loading from %s' % config['trained_model'])
-        agent.load(config['trained_model'])
-        # agent.save_weight_json(config['weight_json'])
+        # load pre-trained model
+        if config['trained_model']:
+            logger.info('Trained model exists, loading from %s' % config['trained_model'])
+            agent.load(config['trained_model'])
+            # agent.save_weight_json(config['weight_json'])
 
     epoch   = 0
     epochs = 10
@@ -492,13 +493,13 @@ if __name__ == '__main__':
         if do_predict:
             for dataset_name in config['testing_datasets']:
                 # override the original test_set
-                # test_set = load_testing_data(dataset_name, kwargs=dict(basedir=config['path']))(idx2word, word2idx, config['preprocess_type'])
-
+                # test_set = keyphrase_test_dataset.testing_data_loader(dataset_name, kwargs=dict(basedir=config['path'])).load_testing_data_postag(word2idx)
                 test_set = test_sets[dataset_name]
 
-                # print(dataset_name)
-                # print('Avg length=%d, Max length=%d' % (np.average([len(s) for s in test_set['source']]), np.max([len(s) for s in test_set['source']])))
-                test_data_plain = zip(*(test_set['source'], test_set['target']))
+                print(dataset_name)
+                print('Avg length=%d, Max length=%d' % (np.average([len(s) for s in test_set['source']]), np.max([len(s) for s in test_set['source']])))
+
+                test_data_plain = zip(*(test_set['source_str'], test_set['target_str'], test_set['source'], test_set['target']))
                 test_size = len(test_data_plain)
 
                 # keep the first 400 in krapivin
@@ -518,7 +519,14 @@ if __name__ == '__main__':
 
                 # Predict on testing data
                 for idx in xrange(len(test_data_plain)): # len(test_data_plain)
-                    test_s_o, test_t_o = test_data_plain[idx]
+                    source_str, target_str, test_s_o, test_t_o = test_data_plain[idx]
+                    print('*'*20 + '  ' + str(idx)+ '  ' + '*'*20)
+                    print(source_str)
+                    print(test_s_o)
+                    print(target_str)
+                    print(test_t_o)
+                    print('')
+
                     if not config['multi_output']:
                         test_s, test_t = split_into_multiple_and_padding([test_s_o], [test_t_o])
                     test_s = test_s[0]
@@ -531,8 +539,9 @@ if __name__ == '__main__':
                     print('test_s_o=%d, test_t_o=%d, test_s=%d, test_t=%d' % (len(test_s_o), len(test_t_o), len(test_s), len(test_t)))
 
                     inputs_unk = np.asarray(unk_filter(np.asarray(test_s, dtype='int32')), dtype='int32')
+                    # inputs_ = np.asarray(test_s, dtype='int32')
 
-                    prediction, score = agent.generate_multiple(inputs_unk[None, :], return_all=True, all_ngram=True)
+                    prediction, score = agent.generate_multiple(inputs_unk[None, :], return_all=True, generate_ngram=config['generate_ngram'])
                     predictions.append(prediction)
                     scores.append(score)
                     progbar_test.update(idx, [])

@@ -14,14 +14,15 @@ import shutil
 import nltk
 import xml.etree.ElementTree as ET
 
-import keyphrase_utils
-from keyphrase.dataset.dataset_utils import build_data, load_pairs
+import keyphrase.dataset.dataset_utils as utils
 from emolga.utils.generic_utils import get_from_module
+from keyphrase import keyphrase_utils
 
-import dataset_utils as utils
 from keyphrase.config import setup_keyphrase_all
 from emolga.dataset.build_dataset import deserialize_from_file, serialize_to_file
 import numpy as np
+
+from keyphrase.dataset import dataset_utils
 
 __author__ = "Rui Meng"
 __email__ = "rui.meng@pitt.edu"
@@ -41,10 +42,11 @@ class Document(object):
 class DataLoader(object):
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
+        self.name    = self.__class__.__name__
         self.basedir = self.basedir
         self.doclist = []
 
-    def get_docs(self, return_dict=True):
+    def get_docs(self, returnDict=True):
         '''
         :return: a list of dict instead of the Document object
         '''
@@ -64,7 +66,7 @@ class DataLoader(object):
             newd['keyword']     = ';'.join(d.phrases)
             doclist.append(newd)
 
-        if return_dict:
+        if returnDict:
             return doclist
         else:
             return self.doclist
@@ -131,7 +133,7 @@ class DataLoader(object):
                     print('UnicodeDecodeError detected! %s' % filename )
 
     def load_text(self, textdir):
-        for filename in os.listdir(textdir):
+        for fid, filename in enumerate(os.listdir(textdir)):
             with open(textdir+filename) as textfile:
                 doc = Document()
                 doc.name = filename[:filename.find('.txt')]
@@ -147,7 +149,7 @@ class DataLoader(object):
 
                     title = lines[0].encode('ascii', 'ignore').decode('ascii', 'ignore')
                     # the 2nd line is abstract title
-                    text  = (' '.join(lines[2:])).encode('ascii', 'ignore').decode('ascii', 'ignore')
+                    text  = (' '.join(lines[1:])).encode('ascii', 'ignore').decode('ascii', 'ignore')
 
                     # if lines[1].strip().lower() != 'abstract':
                     #     print('Wrong title detected : %s' % (filename))
@@ -160,7 +162,7 @@ class DataLoader(object):
                     print('UnicodeDecodeError detected! %s' % filename )
 
     def load_keyphrase(self, keyphrasedir):
-        for doc in self.doclist:
+        for did,doc in enumerate(self.doclist):
             phrase_set = set()
             if os.path.exists(self.keyphrasedir + doc.name + '.keyphrases'):
                 with open(keyphrasedir+doc.name+'.keyphrases') as keyphrasefile:
@@ -176,22 +178,64 @@ class DataLoader(object):
 
             doc.phrases = list(phrase_set)
 
+    def load_testing_data_postag(self, word2idx):
+        print('Loading testing dataset %s from %s' % (self.name, self.postag_datadir))
+        text_file_paths = [self.text_postag_dir + n_ for n_ in os.listdir(self.text_postag_dir)]
+        keyphrase_file_paths = [self.keyphrase_postag_dir + n_ for n_ in os.listdir(self.keyphrase_postag_dir)]
+
+        def load_postag_text_(path):
+            with open(path, 'r') as f:
+                tokens = ' '.join(f.readlines()).split(' ')
+                text = [t.split('_')[0] for t in tokens]
+                postag = [t.split('_')[1] for t in tokens]
+            return text, postag
+
+        def load_keyphrase_(path):
+            with open(path, 'r') as f:
+                keyphrase_str = ';'.join([l.strip() for l in f.readlines()])
+                return dataset_utils.process_keyphrase(keyphrase_str)
+
+        texts = [load_postag_text_(f_) for f_ in text_file_paths]
+        keyphrases = [load_keyphrase_(f_) for f_ in keyphrase_file_paths]
+
+        instance = dict(source_str=[], target_str=[], source=[], source_postag=[], target=[], target_c=[])
+
+        for (source, postag),target in zip(texts, keyphrases):
+            A = [word2idx[w] if w in word2idx else word2idx['<unk>'] for w in source]
+            B = [[word2idx[w] if w in word2idx else word2idx['<unk>'] for w in p] for p in target]
+
+            instance['source_str'] += [source]
+            instance['target_str'] += [target]
+            instance['source'] += [A]
+            instance['source_postag'] += [postag]
+            instance['target'] += [B]
+
+        return instance
+
 class INSPEC(DataLoader):
     def __init__(self, **kwargs):
         super(INSPEC, self).__init__(**kwargs)
         self.datadir = self.basedir + '/dataset/keyphrase/testing-data/INSPEC'
-        self.textdir = self.datadir + '/all_texts/'
-        self.keyphrasedir = self.datadir + '/gold_standard_keyphrases_2/'
+        # self.textdir = self.datadir + '/all_texts/'
+        # self.keyphrasedir = self.datadir + '/gold_standard_keyphrases_2/'
 
-        # self.textdir = self.datadir + '/test_texts/'
-        # self.keyphrasedir = self.datadir + '/gold_standard_test/'
+        self.textdir = self.datadir + '/test_texts/'
+        self.keyphrasedir = self.datadir + '/gold_standard_test/'
+
+        self.postag_datadir = self.basedir + '/dataset/keyphrase/baseline-data/inspec/'
+        self.text_postag_dir = self.postag_datadir + 'text/'
+        self.keyphrase_postag_dir = self.postag_datadir + 'keyphrase/'
 
 class NUS(DataLoader):
     def __init__(self, **kwargs):
         super(NUS, self).__init__(**kwargs)
         self.datadir = self.basedir + '/dataset/keyphrase/testing-data/NUS'
-        self.textdir = self.datadir + '/abstract_introduction_texts/'
+        self.textdir = self.datadir + '/all_texts/'
         self.keyphrasedir = self.datadir + '/gold_standard_keyphrases/'
+
+        self.postag_datadir = self.basedir + '/dataset/keyphrase/baseline-data/nus/'
+        self.text_postag_dir = self.postag_datadir + 'text/'
+        self.keyphrase_postag_dir = self.postag_datadir + 'keyphrase/'
 
     def export(self):
         '''
@@ -230,7 +274,7 @@ class NUS(DataLoader):
                             f.write(key+'\n')
             # else:
             #     print(self.keyphrasedir + paper_id + '.keywords Not Found')
-    def get_docs(self, only_abstract=True, return_dict=True):
+    def get_docs(self, only_abstract=True, returnDict=True):
         '''
         :return: a list of dict instead of the Document object
         The keyphrase in SemEval is already stemmed
@@ -310,7 +354,7 @@ class NUS(DataLoader):
             newd['keyword']     = ';'.join(d.phrases)
             doclist.append(newd)
 
-        if return_dict:
+        if returnDict:
             return doclist
         else:
             return self.doclist
@@ -318,27 +362,31 @@ class NUS(DataLoader):
 class SemEval(DataLoader):
     def __init__(self, **kwargs):
         super(SemEval, self).__init__(**kwargs)
-        # self.datadir = self.basedir + '/dataset/keyphrase/testing-data/SemEval'
-        # self.textdir = self.datadir + '/test/'
-        # self.keyphrasedir = self.datadir + '/test_answer/test.combined.stem.final'
+        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/SemEval'
+        # self.textdir = self.datadir + '/all_texts/'
+        # self.keyphrasedir = self.datadir + '/gold_standard_keyphrases_3/'
+        self.textdir = self.datadir + '/test/'
+        self.keyphrasedir = self.datadir + '/test_answer/test.combined.stem.final'
 
-        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/SemEval/train+trial/'
-        self.textdir = self.datadir + '/all_texts/'
-        self.keyphrasedir = self.datadir + '/gold_standard_keyphrases_3/'
+        self.postag_datadir = self.basedir + '/dataset/keyphrase/baseline-data/semeval/'
+        self.text_postag_dir = self.postag_datadir + 'text/'
+        self.keyphrase_postag_dir = self.postag_datadir + 'keyphrase/'
 
-
-    def get_docs1(self, only_abstract=True, return_dict=True):
+    """
+    def get_docs(self, only_abstract=True, returnDict=True):
         '''
         :return: a list of dict instead of the Document object
         The keyphrase in SemEval is already stemmed
         '''
-        with open(self.keyphrasedir, 'r') as kp:
-            lines = kp.readlines()
-            for line in lines:
-                d = Document()
-                d.name = line[:line.index(':')].strip()
-                d.phrases = line[line.index(':')+1:].split(',')
-                self.doclist.append(d)
+
+        if self.keyphrasedir.endswith('test.combined.stem.final'):
+            with open(self.keyphrasedir, 'r') as kp:
+                lines = kp.readlines()
+                for line in lines:
+                    d = Document()
+                    d.name = line[:line.index(':')].strip()
+                    d.phrases = line[line.index(':')+1:].split(',')
+                    self.doclist.append(d)
 
         for d in self.doclist:
             with open(self.textdir + d.name + '.txt', 'r') as f:
@@ -396,11 +444,11 @@ class SemEval(DataLoader):
             newd['keyword']     = ';'.join(d.phrases)
             doclist.append(newd)
 
-        if return_dict:
+        if returnDict:
             return doclist
         else:
             return self.doclist
-
+    """
 
 class KRAPIVIN(DataLoader):
     def __init__(self, **kwargs):
@@ -408,6 +456,10 @@ class KRAPIVIN(DataLoader):
         self.datadir = self.basedir + '/dataset/keyphrase/testing-data/KRAPIVIN'
         self.textdir = self.datadir + '/all_texts/'
         self.keyphrasedir = self.datadir + '/gold_standard_keyphrases/'
+
+        self.postag_datadir = self.basedir + '/dataset/keyphrase/baseline-data/krapivin/'
+        self.text_postag_dir = self.postag_datadir + 'text/'
+        self.keyphrase_postag_dir = self.postag_datadir + 'keyphrase/'
 
     def load_text(self, textdir):
         for filename in os.listdir(textdir):
@@ -506,6 +558,74 @@ class KE20K(DataLoader):
         else:
             return self.doclist
 
+class DUC(DataLoader):
+    def __init__(self, **kwargs):
+        super(DUC, self).__init__(**kwargs)
+        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/DUC/'
+        self.textdir = self.datadir + '/all_texts/'
+        self.keyphrasedir = self.datadir + '/gold_standard_keyphrases/'
+
+        self.postag_datadir = self.basedir + '/dataset/keyphrase/baseline-data/duc/'
+        self.text_postag_dir = self.postag_datadir + 'text/'
+        self.keyphrase_postag_dir = self.postag_datadir + 'keyphrase/'
+
+    def export_text_phrase(self):
+        all_phrase_file = self.basedir + '/dataset/keyphrase/testing-data/DUC/DUC2001LabeledKeyphrase.txt'
+
+        duc_set = set()
+        with open(all_phrase_file, 'r') as all_pf:
+            for line in all_pf.readlines():
+                line    = line.strip()
+                duc_id  = line[:line.find('@')].strip()
+                phrases = filter(lambda x:len(x.strip()) > 0, line[line.find('@')+1 : ].split(';'))
+                # print(duc_id)
+                # print(phrases)
+
+                with open(self.keyphrasedir + duc_id + '.keyphrases', 'w') as pf:
+                    pf.write('\n'.join(phrases))
+
+                duc_set.add(duc_id)
+
+        # delete the irrelevant files
+        count = 0
+        for text_file in os.listdir(self.datadir + '/original/'):
+            if text_file in duc_set:
+                if text_file.startswith('AP'):
+                    print('*' * 50)
+                    print(text_file)
+                count += 1
+
+                with open(self.datadir + '/original/' + text_file, 'r') as tf:
+                    source = ' '.join([l.strip() for l in tf.readlines()])
+
+                    m = re.search(r'<HEAD>(.*?)</HEAD>', source, flags=re.IGNORECASE)
+                    if m  == None:
+                        m = re.search(r'<HEADLINE>(.*?)</HEADLINE>', source, flags=re.IGNORECASE)
+                    if m  == None:
+                        m = re.search(r'<HL>(.*?)</HL>', source, flags=re.IGNORECASE)
+                    if m  == None:
+                        m = re.search(r'<H3>(.*?)</H3>', source, flags=re.IGNORECASE)
+
+                    title = m.group(1)
+                    title = re.sub('<.*?>', '', title).strip()
+                    if text_file.startswith('FT') and title.find('/') > 0:
+                        title = title[title.find('/')+1:].strip()
+
+                    m = re.search(r'<TEXT>(.*?)</TEXT>', source, flags=re.IGNORECASE)
+                    text = m.group(1)
+                    text = re.sub('<.*?>', '', text).strip()
+
+                    if text_file.startswith('AP'):
+                        print(title)
+                        print(text)
+
+                    with open(self.textdir + text_file + '.txt', 'w') as target_tf:
+                        target_tf.write(title + '\n' + text)
+
+            # else:
+            #     print('Delete!')
+            #     os.remove(self.textdir+text_file)
+        print(count)
 
 # aliases
 inspec = INSPEC
@@ -515,8 +635,8 @@ krapivin = KRAPIVIN
 kdd = KDD
 www = WWW
 umd = UMD
-duc2001 = DUC2001
-ke20k = KE20K
+ke20k = KE20k
+duc = DUC
 # irbooks = IRBooks
 
 def testing_data_loader(identifier, kwargs=None):
@@ -538,12 +658,21 @@ def load_additional_testing_data(testing_names, idx2word, word2idx, config):
         if os.path.exists(config['path'] + '/dataset/keyphrase/'+config['data_process_name']+dataset_name+'.testing.pkl'):
             test_set = deserialize_from_file(config['path'] + '/dataset/keyphrase/'+config['data_process_name']+dataset_name+'.testing.pkl')
         else:
-            records = testing_data_loader(dataset_name, kwargs=dict(basedir = config['path'])).get_docs()
-            _, pairs, _ = load_pairs(records, filter=False)
-            test_set   = build_data(pairs, idx2word, word2idx)
-            tagged_source = get_postag(test_set['source'], idx2word, word2idx)
-            test_set['tagged_source'] = tagged_source
+            dataloader = testing_data_loader(dataset_name, kwargs=dict(basedir=config['path']))
+            records = dataloader.get_docs()
+            records, pairs, _ = utils.load_pairs(records, do_filter=False)
+            test_set   = utils.build_data(pairs, idx2word, word2idx)
+            tagged_sources = get_postag_with_record(records, pairs)
+
+            test_set['record']          = records
+            test_set['tagged_source']   = [[t[1] for t in s] for s in tagged_sources]
             serialize_to_file(test_set, config['path'] + '/dataset/keyphrase/'+config['data_process_name']+dataset_name+'.testing.pkl')
+
+            if hasattr(dataloader, 'text_postag_dir') and dataloader.__getattribute__('text_postag_dir') != None:
+                for r_, p_, s_ in zip(records, pairs, tagged_sources):
+                    with open(dataloader.text_postag_dir+ '/' + r_['name'] + '.txt', 'w') as f:
+                        output_str = ' '.join([w+'_'+t for w,t in s_])
+                        f.write(output_str)
 
         test_sets[dataset_name] = test_set
 
@@ -656,7 +785,6 @@ def add_padding(data):
         dtype='int32')
     for i, sample in enumerate(data):
         padded_batch[i, :len(sample)] = sample
-
     return padded_batch
 
 def split_into_multiple_and_padding(data_s_o, data_t_o):
@@ -671,11 +799,44 @@ def split_into_multiple_and_padding(data_s_o, data_t_o):
     data_t = add_padding(data_t)
     return data_s, data_t
 
-def get_postag(sources, idx2word, word2idx):
-    jar = '/Users/memray/Project/stanford/stanford-postagger/stanford-postagger.jar'
-    # model = '/Users/memray/Project/stanford/stanford-postagger/models/english-left3words-distsim.tagger'
-    model = '/Users/memray/Project/stanford/stanford-postagger/models/english-bidirectional-distsim.tagger'
+def get_postag_with_record(records, pairs):
+    path = os.path.dirname(__file__)
+    path = path[:path.rfind(os.sep, 0, len(path)-10)+1] + 'stanford-postagger/'
+    print(path)
+    # jar = '/Users/memray/Project/stanford/stanford-postagger/stanford-postagger.jar'
+    jar = path + '/stanford-postagger.jar'
+    model = path + '/models/english-bidirectional-distsim.tagger'
     pos_tagger = StanfordPOSTagger(model, jar)
+    # model = '/Users/memray/Project/stanford/stanford-postagger/models/english-left3words-distsim.tagger'
+    # model = '/Users/memray/Project/stanford/stanford-postagger/models/english-bidirectional-distsim.tagger'
+
+    stanford_dir = jar.rpartition('/')[0]
+    stanford_jars = find_jars_within_path(stanford_dir)
+    pos_tagger._stanford_jar = ':'.join(stanford_jars)
+
+    tagged_source = []
+    # Predict on testing data
+    for idx, (record, pair) in enumerate(zip(records, pairs)):  # len(test_data_plain)
+        print('*' * 100)
+        print('File: '  + record['name'])
+        print('Input: ' + str(pair[0]))
+        text = pos_tagger.tag(pair[0])
+        print('[%d/%d][%d] : %s' % (idx, len(records) , len(pair[0]), str(text)))
+        tagged_source.append(text)
+
+    return tagged_source
+
+
+def get_postag_with_index(sources, idx2word, word2idx):
+    path = os.path.dirname(__file__)
+    path = path[:path.rfind(os.sep, 0, len(path)-10)+1] + 'stanford-postagger/'
+    print(path)
+    # jar = '/Users/memray/Project/stanford/stanford-postagger/stanford-postagger.jar'
+    jar = path + '/stanford-postagger.jar'
+    model = path + '/models/english-bidirectional-distsim.tagger'
+    pos_tagger = StanfordPOSTagger(model, jar)
+    # model = '/Users/memray/Project/stanford/stanford-postagger/models/english-left3words-distsim.tagger'
+    # model = '/Users/memray/Project/stanford/stanford-postagger/models/english-bidirectional-distsim.tagger'
 
     stanford_dir = jar.rpartition('/')[0]
     stanford_jars = find_jars_within_path(stanford_dir)
@@ -695,6 +856,12 @@ def get_postag(sources, idx2word, word2idx):
 
 def check_postag(config):
     train_set, validation_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
+
+    path = os.path.dirname(__file__)
+    path = path[:path.rfind(os.sep, 0, len(path)-10)+1] + 'stanford-postagger/'
+    jar = path + '/stanford-postagger.jar'
+    model = path + '/models/english-bidirectional-distsim.tagger'
+    pos_tagger = StanfordPOSTagger(model, jar)
 
     for dataset_name in config['testing_datasets']:
         # override the original test_set
@@ -731,10 +898,20 @@ def check_postag(config):
             print(text)
 
 if __name__ == '__main__':
-    check_data()
-
     # config = setup_keyphrase_all()
+    #
+    # loader = testing_data_loader('duc', kwargs=dict(basedir=config['path']))
+    # loader.export_text_phrase()
+    # docs   = loader.get_docs()
+
+    check_data()
+    pass
+
     # check_postag(config)
+
+    # train_set, validation_set, test_sets, idx2word, word2idx = deserialize_from_file(config['dataset'])
+    # load_additional_testing_data(config['testing_datasets'], idx2word, word2idx, config)
+
             # if len(test_t_o) < 3:
             #
             #     doc.text = re.sub(r'[\r\n\t]', ' ', doc.text)

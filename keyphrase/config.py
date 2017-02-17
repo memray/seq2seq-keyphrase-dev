@@ -9,6 +9,7 @@ def setup_keyphrase_all():
     config = dict()
     # config['seed']            = 3030029828
     config['seed']            = 154316847
+    config['model_name']      = 'RNN' # 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'Kea', 'RNN', 'CopyRNN', 'CopyRNN-weak'
     # config['task_name']       = 'keyphrase-all.one2one.copy'
     # config['task_name']       = 'keyphrase-all.one2one.nocopy'
     config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
@@ -69,10 +70,9 @@ def setup_keyphrase_all():
 
     # trained_model
     # config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.copy.id=20170106-025508.epoch=4.batch=1000.pkl'
-    config['trained_model']   = config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
-    # config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.nocopy.id=20161230-000056.epoch=3.batch=1000.pkl'
+    config['trained_model']   = config['path_experiment'] + '/experiments.keyphrase-all.one2one.nocopy.id=20161230-000056.epoch=3.batch=1000.pkl'
     # A copy-model
-    # config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
+    # config['trained_model'] = config['path_experiment'] + '/experiments.copynet-keyphrase-all.one2one.copy.id=20161220-070035.epoch=2.batch=20000.pkl'
     # A well-trained no-copy model
     # config['path_experiment'] + '/experiments.keyphrase-all.one2one.nocopy.id=20161230-000056.epoch=3.batch=1000.pkl'
     # A well-trained model on all data
@@ -111,13 +111,23 @@ def setup_keyphrase_all():
 
     config['normalize_score']   = True #
     # config['normalize_score']   = True
-    config['target_filter']     = 'appear-only' # 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
-    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
+    config['target_filter']     = None # 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
+    config['predict_filter']    = None # whether do filtering on predictions? 'appear-only','non-appear-only' and None
     config['keep_longest']      = True # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
     config['noun_phrase_only']  = False
     # config['noun_phrase_only']  = True
 
-    config['number_to_predict'] = 10 # [desperated] the k in P@k,R@k,F1@k
+    # config['predict_path']    = config['path_experiment'] + '/predict.' + config['predict_type']+ '.'+ config['timemark'] + '.dataset=%d.len=%d.beam=%d.predict=%s-%s.target=%s.keeplongest=%s.noun_phrase=%s/' % (len(config['testing_datasets']),config['max_len'], config['sample_beam'], 'ngram-'if config['generate_ngram'] else '', config['predict_filter'], config['target_filter'], config['keep_longest'], config['noun_phrase_only'])
+    config['predict_path']    = config['path_experiment'] + '/[reported]predict.generative.20170122-024512.dataset=5.len=6.beam=200.predict=-non-appear-only.target=non-appear-only.keeplongest=False.noun_phrase=False/'
+
+    if not os.path.exists(config['predict_path']):
+        os.mkdir(config['predict_path'])
+
+    # config['path_experiment'] + '/copynet-keyphrase-all.one2one.nocopy.generate.len=8.beam=50.predict.pkl'
+    # '/copynet-keyphrase-all.one2one.nocopy.extract.predict.pkl'
+    #config['path_experiment'] + '/'+ config['task_name']+ '.' + config['predict_type'] + ('.len={0}.beam={1}'.format(config['max_len'], config['sample_beam'])) + '.predict.pkl' # prediction on testing data
+
+
 
     # Encoder: Model
     config['bidirectional']   = True
@@ -266,7 +276,7 @@ def setup_keyphrase_baseline():
     config['sample_argmax']   = False
 
     config['predict_type']    = 'extractive' # type of prediction, extractive or generative
-    config['predict_path']    = config['path_experiment'] + '/predict.20170108-041052.data=4.len=6.beam=all.predict=ngram.target=all.keeplongest=false/'
+    config['predict_path']    = config['path_experiment'] + '/predict.'+config['timemark']+'.data=5.len=6.beam=all.predict=appear_only.target=appear_only/'
                                 # config['path_experiment'] + '/predict.20161231-152451.len=6.beam=200.target=appear_only/'
                                 # '/copynet-keyphrase-all.one2one.nocopy.extractive.predict.pkl'
     if not os.path.exists(config['predict_path']):

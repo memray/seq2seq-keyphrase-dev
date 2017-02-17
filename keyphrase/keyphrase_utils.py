@@ -3,19 +3,12 @@ import math
 import logging
 from nltk.stem.porter import *
 import numpy as np
+import os
+import copy
 
 from dataset import dataset_utils
 
 logger = logging.getLogger(__name__)
-
-
-def cut_zero(sample, idx2word):
-    sample = list(sample)
-    if 0 not in sample:
-        return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample]
-    # return the string before 0 (<eol>)
-    return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample[:sample.index(0)]]
-
 
 def evaluate_multiple(config, test_set, inputs, outputs,
                       original_input, original_outputs,
@@ -46,32 +39,47 @@ def evaluate_multiple(config, test_set, inputs, outputs,
     with open(config['path'] + '/dataset/stopword/stopword_en.txt') as stopword_file:
         stopword_set = set([stemmer.stem(w.strip()) for w in stopword_file])
 
-    postag_lists = [[s[1] for s in d] for d in test_set['tagged_source']]
+    # postag_lists = [[s[1] for s in d] for d in test_set['tagged_source']]
+    # postag_lists = [[] for d in test_set['tagged_source']]
+
+    model_nickname = config['model_name']  # 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'Kea', 'RNN', 'CopyRNN'
+    base_dir = config['path'] + '/dataset/keyphrase/prediction/' + model_nickname + '_' + config['timemark'] + '/'
+    text_dir = config['baseline_data_path'] + dataset_name + '/text/'
+    target_dir = config['baseline_data_path'] + dataset_name + '/keyphrase/'
+    prediction_dir = base_dir + dataset_name
+    doc_names = [name[:name.index('.')] for name in os.listdir(text_dir)]
 
     # reload the targets from corpus directly
     # target_dir = config['baseline_data_path'] + dataset_name + '/keyphrase/'
 
+    test_set['source_postag'] = test_set['target_str']
+
     # for input_sentence, target_list, predict_list, score_list in zip(inputs, original_outputs, samples, scores):
-    for source_str, input_sentence, target_list, predict_list, score_list, postag_list in zip(test_set['source_str'], inputs, test_set['target_str'], samples, scores, postag_lists):
+    for doc_name, source_str, input_sentence, target_list, predict_list, score_list, postag_list in zip(doc_names, test_set['source_str'], inputs, test_set['target_str'], samples, scores, test_set['source_postag']):
 
         '''
         enumerate each document, process target/predict/score and measure via p/r/f1
         '''
         target_outputs = []
+        original_target_list = copy.copy(target_list) # no stemming
+        predict_indexes = []
+        original_predict_outputs = [] # no stemming
         predict_outputs = []
         predict_score = []
         predict_set = set()
         correctly_matched = np.asarray([0] * max(len(target_list), len(predict_list)), dtype='int32')
+        is_copied = []
 
-        # stem the original input
-        stemmed_input = [stemmer.stem(w) for w in cut_zero(input_sentence, idx2word)]
+        # stem the original input, do on source_str not the index list input_sentence
+        # stemmed_input = [stemmer.stem(w) for w in cut_zero(input_sentence, idx2word)]
+        stemmed_input = [stemmer.stem(w) for w in source_str]
 
         # convert target index into string
         for target in target_list:
             # target = cut_zero(target, idx2word)
             if do_stem:
                 target = [stemmer.stem(w) for w in target]
-            print(target)
+            # print(target)
 
             keep = True
             # whether do filtering on groundtruth phrases. if config['target_filter']==None, do nothing
@@ -112,10 +120,33 @@ def evaluate_multiple(config, test_set, inputs, outputs,
             noun_phrases = dataset_utils.get_none_phrases(stemmed_source, postag_list, config['max_len'])
             noun_phrase_set = set([' '.join(p[0]) for p in noun_phrases])
 
+        def cut_zero(sample_index, idx2word, source_str):
+            sample_index = list(sample_index)
+            # if 0 not in sample:
+            #     return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample]
+            # # return the string before 0 (<eol>)
+            # return ['{}'.format(idx2word[w].encode('utf-8')) for w in sample[:sample.index(0)]]
+
+            if 0 in sample_index:
+                sample_index = sample_index[:sample_index.index(0)]
+
+            wordlist = []
+            find_copy = False
+            for w_index in sample_index:
+                if w_index >= config['voc_size']:
+                    wordlist.append(source_str[w_index-config['voc_size']].encode('utf-8'))
+                    find_copy = True
+                else:
+                    wordlist.append(idx2word[w_index].encode('utf-8'))
+            if find_copy:
+                logger.info('Find copy! - %s - %s' % (' '.join(wordlist), str(sample_index)))
+            return sample_index, wordlist
+
+        single_word_maximum = 1
         # convert predict index into string
         for id, (predict, score) in enumerate(zip(predict_list, score_list)):
-            predict = cut_zero(predict, idx2word)
-            predict = [stemmer.stem(w) for w in predict]
+            predict_index, original_predict = cut_zero(predict, idx2word, source_str)
+            predict = [stemmer.stem(w) for w in original_predict]
 
             # filter some not good ones
             keep = True
@@ -135,8 +166,12 @@ def evaluate_multiple(config, test_set, inputs, outputs,
             if len(predict) >= 1 and (predict[0] in stopword_set or predict[-1] in stopword_set):
                 keep = False
 
+            # filter out single-word predictions
             if len(predict) <= 1:
-                keep = False
+                if single_word_maximum > 0:
+                    single_word_maximum -= 1
+                else:
+                    keep = False
 
             # whether do filtering on predicted phrases. if config['predict_filter']==None, do nothing
             if config['predict_filter']:
@@ -189,6 +224,13 @@ def evaluate_multiple(config, test_set, inputs, outputs,
             if not keep:
                 continue
 
+            if any(i_>config['voc_size'] for i_ in predict_index):
+                is_copied.append(1)
+            else:
+                is_copied.append(0)
+
+            original_predict_outputs.append(original_predict)
+            predict_indexes.append(predict_index)
             predict_outputs.append(predict)
             predict_score.append(score)
             predict_set.add(key)
@@ -218,8 +260,11 @@ def evaluate_multiple(config, test_set, inputs, outputs,
                     # print("Matched pair: %s \t - \t %s" % (str(p_ii), str(p_jj)))
                     # pass
 
+            original_predict_outputs = np.delete(original_predict_outputs, match_phrase_index)
+            predict_indexes = np.delete(predict_indexes, match_phrase_index)
             predict_outputs = np.delete(predict_outputs, match_phrase_index)
             predict_score  = np.delete(predict_score, match_phrase_index)
+            is_copied  = np.delete(is_copied, match_phrase_index)
 
         # check whether the predicted phrase is correct (match any groundtruth)
         for p_id, predict in enumerate(predict_outputs):
@@ -233,24 +278,30 @@ def evaluate_multiple(config, test_set, inputs, outputs,
                         correctly_matched[p_id] = 1
                         # print('%s correct!!!' % predict)
 
-
+        original_predict_outputs = np.asarray(original_predict_outputs)
+        predict_indexes = np.asarray(predict_indexes)
         predict_outputs = np.asarray(predict_outputs)
         predict_score = np.asarray(predict_score)
+        is_copied = np.asarray(is_copied)
         # normalize the score?
         if config['normalize_score']:
             predict_score = np.asarray(
                 [math.log(math.exp(score) / len(predict)) for predict, score in zip(predict_outputs, predict_score)])
             score_list_index = np.argsort(predict_score)
+            original_predict_outputs = original_predict_outputs[score_list_index]
+            predict_indexes = predict_indexes[score_list_index]
             predict_outputs = predict_outputs[score_list_index]
             predict_score = predict_score[score_list_index]
             correctly_matched = correctly_matched[score_list_index]
+            is_copied = is_copied[score_list_index]
+
 
         metric_dict = {}
 
         '''
         Compute micro metrics
         '''
-        for number_to_predict in [5, 10, 15]:
+        for number_to_predict in [5, 10, 15, 20, 30, 40, 50]: #5, 10, 15, 20, 30, 40, 50
             metric_dict['appear_target_number'] = len(target_outputs)
             metric_dict['target_number'] = len(target_list)
             metric_dict['correct_number@%d' % number_to_predict] = sum(correctly_matched[:number_to_predict])
@@ -300,23 +351,40 @@ def evaluate_multiple(config, test_set, inputs, outputs,
         predict_scores.append(predict_score)
 
         '''
+        Output keyphrases to prediction folder
+        '''
+        if not os.path.exists(prediction_dir):
+            os.makedirs(prediction_dir)
+
+        with open(prediction_dir + '/' + doc_name + '.txt.phrases', 'w') as output_file:
+            output_file.write('\n'.join([' '.join(o_) for o_ in original_predict_outputs]))
+
+        '''
         Print information on each prediction
         '''
         # print stuff
-        a = '[SOURCE][{0}]: {1}'.format(len(input_sentence) ,' '.join(cut_zero(input_sentence, idx2word)))
+        a = '[SOURCE][{0}]: {1}'.format(len(input_sentence) ,' '.join(source_str))
         logger.info(a)
         a += '\n'
 
-        b = '[TARGET]: %d/%d targets\n\t\t' % (len(target_outputs), len(target_list))
-        for id, target in enumerate(target_outputs):
-            b += ' '.join(target) + '; '
+        b = '[GROUND-TRUTH]: %d/%d ground-truth phrases\n\t\t' % (len(target_outputs), len(target_list))
+        target_output_set = set(['_'.join(t) for t in target_outputs])
+        for id, target in enumerate(original_target_list):
+            if '_'.join([stemmer.stem(w) for w in target]) in target_output_set:
+                b += '['+' '.join(target) + ']; '
+            else:
+                b += ' '.join(target) + '; '
         logger.info(b)
         b += '\n'
-        c = '[DECODE]: %d/%d predictions' % (len(predict_outputs), len(predict_list))
-        for id, (predict, score) in enumerate(zip(predict_outputs, predict_score)):
+        c = '[PREDICTION]: %d/%d predictions\n' % (len(predict_outputs), len(predict_list))
+        c += '[Correct@10] = %d\n' % metric_dict['correct_number@10']
+        c += '[Correct@50] = %d\n' % metric_dict['correct_number@50']
+        for id, (predict, score, predict_index) in enumerate(zip(original_predict_outputs, predict_score, predict_indexes)):
             c += ('\n\t\t[%.3f][%d][%d]' % (score, len(predict), sum([len(w) for w in predict]))) + ' '.join(predict)
             if correctly_matched[id] == 1:
                 c += ' [correct!]'
+            if is_copied[id] == 1:
+                c += '[copied!] %s'%str(predict_index)
                 # print(('\n\t\t[%.3f]'% score) + ' '.join(predict) + ' [correct!]')
                 # print(('\n\t\t[%.3f]'% score) + ' '.join(predict))
         c += '\n'
@@ -329,7 +397,7 @@ def evaluate_multiple(config, test_set, inputs, outputs,
         logger.info(c)
         a += b + c
 
-        for number_to_predict in [5, 10, 15]:
+        for number_to_predict in [5, 10, 15, 20, 30, 40, 50]:
             d = '@%d - Precision=%.4f, Recall=%.4f, F1=%.4f, Bpref=%.4f, MRR=%.4f' % (
             number_to_predict, metric_dict['p@%d' % number_to_predict], metric_dict['r@%d' % number_to_predict],
             metric_dict['f1@%d' % number_to_predict], metric_dict['bpref@%d' % number_to_predict], metric_dict['mrr@%d' % number_to_predict])
@@ -350,7 +418,7 @@ def evaluate_multiple(config, test_set, inputs, outputs,
     logger.info('Experiment result: %s' % (config['predict_path'] + '/' + model_name+'-'+dataset_name+'.txt'))
     csv_writer = open(config['predict_path'] + '/' + model_name+'-'+dataset_name+'.txt', 'w')
     overall_score = {}
-    for k in [5, 10, 15]:
+    for k in [5, 10, 15, 20, 30, 40, 50]:
         correct_number = sum([m['correct_number@%d' % k] for m in micro_metrics])
         appear_target_number = sum([m['appear_target_number'] for m in micro_metrics])
         target_number = sum([m['target_number'] for m in micro_metrics])
@@ -453,3 +521,10 @@ def evaluate_multiple(config, test_set, inputs, outputs,
     csv_writer.close()
 
     return outs, overall_score
+
+
+def export_keyphrase(predictions, text_dir, prediction_dir):
+    doc_names = [name[:name.index('.')] for name in os.listdir(text_dir)]
+    for name_, prediction_ in zip(doc_names, predictions):
+        with open(prediction_dir+name_+'.phrases') as output_file:
+            output_file.write('\n'.join(prediction_))

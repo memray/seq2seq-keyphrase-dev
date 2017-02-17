@@ -11,7 +11,7 @@ import numpy as np
 import re
 
 import emolga.dataset.build_dataset as db
-from config import setup_keyphrase_all
+from keyphrase.config import setup_keyphrase_all
 
 sent_detector = nltk.data.load('tokenizers/punkt/english.pickle')
 SENTENCEDELIMITER = '<eos>'
@@ -21,7 +21,7 @@ __author__ = "Rui Meng"
 __email__ = "rui.meng@pitt.edu"
 
 
-def prepare_text(record, tokenize_sentence = True):
+def prepare_text(record, tokenize_sentence = False):
     '''
     concatenate title and abstract, do sentence tokenization if needed
         As I keep most of punctuations (including period), actually I should have stopped doing sentence boundary detection
@@ -113,12 +113,18 @@ def build_data(data, idx2word, word2idx):
             print C
     return instance
 
-def load_pairs(records, filter=False):
+def load_pairs(records, do_filter=False):
     wordfreq = dict()
     filtered_records = []
     pairs = []
 
+    import string
+    printable = set(string.printable)
+
     for id, record in enumerate(records):
+        record['keyword'] = filter(lambda x: x in printable, record['keyword'])
+        record['abstract'] = filter(lambda x: x in printable, record['abstract'])
+        record['title'] = filter(lambda x: x in printable, record['title'])
         text        = prepare_text(record, tokenize_sentence = False)
         tokens      = get_tokens(text)
         keyphrases  = process_keyphrase(record['keyword'])
@@ -136,18 +142,22 @@ def load_pairs(records, filter=False):
                 else:
                     wordfreq[w] += 1
 
-        if id % 10000 == 0:
+        if id % 10000 == 0 and id > 1:
             print('%d \n\t%s \n\t%s \n\t%s' % (id, text, tokens, keyphrases))
+            # break
 
+        fine_tokens = re.split(r'[\.,;]',record['keyword'].lower())
         if sum([len(k) for k in keyphrases]) != 0:
-            ratio = float(len(record['keyword'])) / float(sum([len(k) for k in keyphrases]))
+            ratio1 = float(len(record['keyword'])) / float(sum([len(k) for k in keyphrases]))
+            ratio2 = float(sum([len(k) for k in fine_tokens])) / float(len(fine_tokens))
         else:
-            ratio = 0
-        if ( filter and ratio < 3.5 ): # usually < 4.5 is noice
+            ratio1 = 0
+            ratio2 = 0
+        if ( do_filter and (ratio1< 3.5)): # usually ratio1 < 3.5 is noise. actually ratio2 is more reasonable, but we didn't use out of consistency
             print('!' * 100)
             print('Error found')
-            print('%d - title=%s, \n\ttext=%s, \n\tkeyphrase=%s \n\tkeyphrase after process=%s \n\tlen(keyphrase)=%d, #(tokens in keyphrase)=%d \n\tratio=%.3f' % (
-            id, record['title'], record['abstract'], record['keyword'], keyphrases, len(record['keyword']), sum([len(k) for k in keyphrases]), ratio))
+            print('%d - title=%s, \n\ttext=%s, \n\tkeyphrase=%s \n\tkeyphrase after process=%s \n\tlen(keyphrase)=%d, #(tokens in keyphrase)=%d \n\tratio1=%.3f\tratio2=%.3f' % (
+            id, record['title'], record['abstract'], record['keyword'], keyphrases, len(record['keyword']), sum([len(k) for k in keyphrases]), ratio1, ratio2))
             continue
 
         pairs.append((tokens, keyphrases))

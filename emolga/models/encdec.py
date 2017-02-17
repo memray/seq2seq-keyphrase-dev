@@ -1425,7 +1425,6 @@ class DecoderAtt(Decoder):
                 '''
                 previous_word = np.array([w[-1] for w in hyp_samples])
                 previous_state = np.array(hyp_states)
-                pass
 
             logger.info('\t Depth=%d, get %d outputs' % (ii, len(sample)))
 
@@ -1949,7 +1948,7 @@ class NRM(Model):
 
         return sample, np.exp(score)
 
-    def generate_multiple(self, inputs, mode='display', return_all=True, all_ngram=True):
+    def generate_multiple(self, inputs, mode='display', return_all=True, all_ngram=True, generate_ngram=True):
         '''
         Generate output sequence
         '''

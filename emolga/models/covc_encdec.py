@@ -1125,14 +1125,14 @@ class DecoderAtt(Decoder):
     [:-:] I have to think over how to modify the BEAM-Search!!
     """
     def get_sample(self,
-                   encoding,  # the RNN encoding of source text at each time step, shape = [1, sent_len, 2*output_dim]
+                   context,  # the RNN encoding of source text at each time step, shape = [1, sent_len, 2*output_dim]
                    c_mask,  # shape = [1, sent_len]
                    sources,  # shape = [1, sent_len]
                    k=1, maxlen=30, stochastic=True,  # k = config['sample_beam'], maxlen = config['max_len']
                    argmax=False, fixlen=False,
                    return_attend=False,
                    type='extractive',
-                   all_ngram=True
+                   generate_ngram=True
                    ):
         # beam size
         if k > 1:
@@ -1145,7 +1145,7 @@ class DecoderAtt(Decoder):
         # prepare for searching
         Lmax   = self.config['dec_voc_size']
         sample = [] # predited sequences
-        ppp    = [] # don't know what's this
+        attention_probs    = [] # don't know what's this
         attend = []
         score  = [] # probability of predited sequences
         state = [] # the output encoding of predited sequences
@@ -1158,13 +1158,13 @@ class DecoderAtt(Decoder):
 
         hyp_samples = [[]] * live_k
         hyp_scores  = np.zeros(live_k).astype(theano.config.floatX)
-        hyp_ppps    = [[]] * live_k
+        hyp_attention_probs    = [[]] * live_k
         hyp_attends = [[]] * live_k
 
         # get initial state of decoder RNN with encoding
         #   feed in the encoding of time=0(why 0?! because the X_out of RNN is reverse?), do tanh(W*x+b) and output next_state shape=[1,output_dim]
-        #   ss_prob and coverage are zeros[context.shape]
-        previous_state, copy_word_prob, coverage = self.get_init_state(encoding)
+        #   copy_word_prob and coverage are zeros[context.shape]
+        previous_state, copy_word_prob, coverage = self.get_init_state(context)
         # indicator for the first target word (bos target), starts with [-1]
         previous_word = -1 * np.ones((1,)).astype('int32')
 
@@ -1174,36 +1174,41 @@ class DecoderAtt(Decoder):
             input_set = set(input)
             sequence_set = set()
 
-            for i in range(len(input)): # loop over start
-                for j in range(1, maxlen): # loop over length
-                    if i+j > len(input)-1:
-                        break
-                    hash_token = [str(s) for s in input[i:i+j]]
-                    sequence_set.add('-'.join(hash_token))
-            logger.info("Possible n-grams: %d" % len(sequence_set))
+            if generate_ngram:
+                for i in range(len(input)): # loop over start
+                    for j in range(1, maxlen): # loop over length
+                        if i+j > len(input)-1:
+                            break
+                        hash_token = [str(s) for s in input[i:i+j]]
+                        sequence_set.add('-'.join(hash_token))
+                logger.info("Possible n-grams: %d" % len(sequence_set))
 
         # Start searching!
         for ii in xrange(maxlen):
             # make live_k copies of context, c_mask and source, to predict next words at once.
             #   np.tile(context, [live_k, 1, 1]) means copying along the axis=0
-            encoding_copies    = np.tile(encoding, [live_k, 1, 1]) # shape = [live_k, sent_len, 2*output_dim]
+            context_copies     = np.tile(context, [live_k, 1, 1]) # shape = [live_k, sent_len, 2*output_dim]
             c_mask_copies      = np.tile(c_mask,  [live_k, 1])    # shape = [live_k, sent_len]
             source_copies      = np.tile(sources, [live_k, 1])    # shape = [live_k, sent_len]
 
             # process word
             def process_():
                 """
-                ll[i] indicates whether the previous_word[i] appears in source text, like cc_matrix
-                else:
-                    update the ll[i]
+                copy_mask[i] indicates which words in source have been copied (whether the previous_word[i] appears in source text)
+                size = size(source_copies) = [live_k, sent_len]
+                Caution:     word2idx['<eol>'] = 0, word2idx['<unk>'] = 1
                 """
-                # caution for index_0: UNK
                 copy_mask  = np.zeros((source_copies.shape[0], source_copies.shape[1]), dtype='float32')
-                for i in xrange(previous_word.shape[0]):
-                    #   if a predicted word is OOV (next_word[i] >= Lmax):
-                    #       means it predicts the index of word in source text
-                    #       set next_word to this word (which index > V)
 
+                for i in xrange(previous_word.shape[0]): # loop over the previous_words, index of previous words, size=(1, live_k)
+                    #   Note that the model predict a OOV word in the way like voc_size+position_in_source
+                    #   if a previous predicted word is OOV (next_word[i] >= Lmax):
+                    #       means it predicts the position of word in source text (next_word[i]=voc_size+position_in_source)
+                    #           1. set copy_mask to 1, indicates which last word is copied;
+                    #           2. set next_word to the real index of this word (source_copies[previous_word[i] - Lmax])
+                    #   else:
+                    #       means not a OOV word, but may be still copied from source
+                    #       check if any word in source_copies[i] is same to previous_word[i]
                     if previous_word[i] >= Lmax:
                         copy_mask[i][previous_word[i] - Lmax] = 1.
                         previous_word[i] = source_copies[i][previous_word[i] - Lmax]
@@ -1222,9 +1227,9 @@ class DecoderAtt(Decoder):
             '''
             Get the probability of next word, sec 3.2 and 3.3
                 Return:
-                    next_prob0  : probabilities of next word, shape=(1, voc_size+sent_len)
-                                    next_prob0[:voc_size] is generative probability
-                                    next_prob0[voc_size:voc_size+sent_len] is copy probability
+                    next_prob0  : probabilities of next word, shape=(live_k, voc_size+sent_len)
+                                    next_prob0[:, :voc_size] is generative probability
+                                    next_prob0[:, voc_size:voc_size+sent_len] is copy probability
                     next_word   : only useful for stochastic
                     next_state  : output (decoding) vector after time t
                     coverage    :
@@ -1240,7 +1245,7 @@ class DecoderAtt(Decoder):
                     if don't do copying, only previous_word,previous_state,context_copies,c_mask_copies are needed for predicting
             '''
             next_prob0, next_word, next_state, coverage, alpha \
-                = self.sample_next(previous_word, previous_state, next_a, coverage, encoding_copies, c_mask_copies)
+                = self.sample_next(previous_word, previous_state, next_a, coverage, context_copies, c_mask_copies)
             if not self.config['decode_unk']: # eliminate the probability of <unk>
                 next_prob0[:, 1]          = 0.
                 next_prob0 /= np.sum(next_prob0, axis=1, keepdims=True)
@@ -1249,7 +1254,7 @@ class DecoderAtt(Decoder):
                 # merge the probabilities, p(w) = p_generate(w)+p_copy(w)
                 temple_prob  = copy.copy(next_prob0)
                 source_prob  = copy.copy(next_prob0[:, Lmax:])
-                for i in xrange(next_prob0.shape[0]): # loop over all the last words
+                for i in xrange(next_prob0.shape[0]): # loop over all the previous words
                     for j in xrange(source_copies.shape[1]): # loop over all the source words
                         if (source_copies[i, j] < Lmax) and (source_copies[i, j] != 1): # if word source_copies[i, j] in voc and not a unk
                             temple_prob[i, source_copies[i, j]] += source_prob[i, j] # add the copy prob to generative prob
@@ -1258,7 +1263,7 @@ class DecoderAtt(Decoder):
                 return temple_prob, source_prob
             # if word in voc, add the copy prob to generative prob and keep generate prob only, else keep the copy prob only
             generate_word_prob, copy_word_prob   = merge_()
-            next_prob0[:, Lmax:] = 0. # set the latter (copy) part to be zeros
+            next_prob0[:, Lmax:] = 0. # [not quite useful]set the latter (copy) part to be zeros, actually next_prob0 become really generate_word_prob
             # print '0', next_prob0[:, 3165]
             # print '01', next_prob[:, 3165]
             # # print next_prob[0, Lmax:]
@@ -1279,26 +1284,31 @@ class DecoderAtt(Decoder):
                     break
 
             else:
-                # using beam-search, keep the top (k-dead_k) results (dead_k is disabled by memray)
-                # we can only computed in a flatten way!
-                cand_scores = hyp_scores[:, None] - np.log(generate_word_prob + 1e-10) # add a 1e-10 to avoid log(0)
-                cand_flat   = cand_scores.flatten()
-                ranks_flat  = cand_flat.argsort()[:(k - dead_k)] # get the index of top k predictions
+                '''
+                using beam-search, keep the top (k-dead_k) results (dead_k is disabled by memray)
+                we can only computed in a flatten way!
+                '''
+                # add the score of new predicted word to the score of whole sequence, the reason why the score of longer sequence getting smaller
+                #       add a 1e-10 to avoid log(0)
+                #       size(hyp_scores)=[live_k,1], size(generate_word_prob)=[live_k,voc_size+sent_len]
+                cand_scores     = hyp_scores[:, None] - np.log(generate_word_prob + 1e-10)
+                cand_flat       = cand_scores.flatten()
+                ranks_flat      = cand_flat.argsort()[:(k - dead_k)] # get the index of top k predictions
 
-                # fetch the best results.
-                voc_size    = generate_word_prob.shape[1]
-                sequence_index = ranks_flat / voc_size
-                next_word_index  = ranks_flat % voc_size
-                costs       = cand_flat[ranks_flat]
+                # recover(stack) the flat results, fetch the best results.
+                voc_size        = generate_word_prob.shape[1]
+                sequence_index  = ranks_flat / voc_size # flat_index/voc_size is the original sequence index
+                next_word_index = ranks_flat % voc_size # flat_index%voc_size is the original word index
+                costs           = cand_flat[ranks_flat]
 
                 # get the new hyp samples
-                new_hyp_samples  = []
-                new_hyp_ppps     = []
-                new_hyp_attends  = []
-                new_hyp_scores   = np.zeros(k - dead_k).astype(theano.config.floatX)
-                new_hyp_states   = []
-                new_hyp_coverage = []
-                new_hyp_ss       = []
+                new_hyp_samples         = []
+                new_hyp_attention_probs = []
+                new_hyp_attends         = []
+                new_hyp_scores          = np.zeros(k - dead_k).astype(theano.config.floatX)
+                new_hyp_states          = []
+                new_hyp_coverage        = []
+                new_hyp_copy_word_prob  = []
 
                 for idx, [ti, wi] in enumerate(zip(sequence_index, next_word_index)):
                     new_hyp_samples.append(hyp_samples[ti] + [wi])
@@ -1306,47 +1316,59 @@ class DecoderAtt(Decoder):
 
                     new_hyp_states.append(copy.copy(next_state[ti]))
                     new_hyp_coverage.append(copy.copy(coverage[ti]))
-                    new_hyp_ss.append(copy.copy(copy_word_prob[ti]))
+                    new_hyp_copy_word_prob.append(copy.copy(copy_word_prob[ti]))
 
                     # what's the ppp? generative attention and copy attention?
                     if not return_attend:
-                        new_hyp_ppps.append(hyp_ppps[ti] + [[next_prob0[ti][wi], generate_word_prob[ti][wi]]])
+                        # probability of current predicted word (generative part and both generative/copying part)
+                        new_hyp_attention_probs.append(hyp_attention_probs[ti] + [[next_prob0[ti][wi], generate_word_prob[ti][wi]]])
                     else:
-                        new_hyp_ppps.append(hyp_ppps[ti] + [(copy_word_prob[ti], alpha[ti])])
+                        # copying probability and attention probability of current predicted word
+                        new_hyp_attention_probs.append(hyp_attention_probs[ti] + [(copy_word_prob[ti], alpha[ti])])
 
                 # check the finished samples
-                new_live_k   = 0
-                hyp_samples  = []
-                hyp_scores   = []
-                hyp_states   = []
-                hyp_coverage = []
-                hyp_ppps     = []
-                hyp_ss       = []
+                new_live_k          = 0
+                hyp_samples         = []
+                hyp_scores          = []
+                hyp_states          = []
+                hyp_coverage        = []
+                hyp_attention_probs = []
+                hyp_copy_word_prob  = []
 
                 for idx in xrange(len(new_hyp_samples)):
                     # [bug] change to new_hyp_samples[idx][-1] == 0
                     # if (new_hyp_states[idx][-1] == 0) and (not fixlen):
                     if (new_hyp_samples[idx][-1] == 0 and not fixlen):
+                        '''
+                        predict a <eos>, this sequence is done
+                        put successful prediction into result list
+                        '''
+                        # worth-noting that if the word index is larger than voc_size, it means a OOV word
                         sample.append(new_hyp_samples[idx])
-                        ppp.append(new_hyp_ppps[idx])
+                        attention_probs.append(new_hyp_attention_probs[idx])
                         score.append(new_hyp_scores[idx])
                         state.append(new_hyp_states[idx])
                         # dead_k += 1
                     if new_hyp_samples[idx][-1] != 0:
+                        '''
+                        sequence prediction not complete
+                        put into candidate list for next round prediction
+                        '''
                         # limit predictions must appear in text
                         if type == 'extractive':
                             if new_hyp_samples[idx][-1] not in input_set:
                                 continue
-                            if '-'.join([str(s) for s in new_hyp_samples[idx]]) not in sequence_set:
-                                continue
+                            if generate_ngram:
+                                if '-'.join([str(s) for s in new_hyp_samples[idx]]) not in sequence_set:
+                                    continue
 
                         new_live_k += 1
                         hyp_samples.append(new_hyp_samples[idx])
-                        hyp_ppps.append(new_hyp_ppps[idx])
+                        hyp_attention_probs.append(new_hyp_attention_probs[idx])
                         hyp_scores.append(new_hyp_scores[idx])
                         hyp_states.append(new_hyp_states[idx])
                         hyp_coverage.append(new_hyp_coverage[idx])
-                        hyp_ss.append(new_hyp_ss[idx])
+                        hyp_copy_word_prob.append(new_hyp_copy_word_prob[idx])
 
                 hyp_scores = np.array(hyp_scores)
                 live_k = new_live_k
@@ -1357,10 +1379,10 @@ class DecoderAtt(Decoder):
                 #     break
 
                 # prepare the variables for predicting next round
-                previous_word  = np.array([w[-1] for w in hyp_samples])
-                previous_state = np.array(hyp_states)
-                coverage   = np.array(hyp_coverage)
-                copy_word_prob    = np.array(hyp_ss)
+                previous_word   = np.array([w[-1] for w in hyp_samples])
+                previous_state  = np.array(hyp_states)
+                coverage        = np.array(hyp_coverage)
+                copy_word_prob  = np.array(hyp_copy_word_prob)
                 pass
 
             logger.info('\t Depth=%d, get %d outputs' % (ii, len(sample)))
@@ -1371,15 +1393,15 @@ class DecoderAtt(Decoder):
             if live_k > 0:
                 for idx in xrange(live_k):
                     sample.append(hyp_samples[idx])
-                    ppp.append(hyp_ppps[idx])
+                    attention_probs.append(hyp_attention_probs[idx])
                     score.append(hyp_scores[idx])
                     state.append(hyp_states[idx])
 
         # sort the result
-        result = zip(sample, score, ppp, state)
+        result = zip(sample, score, attention_probs, state)
         sorted_result = sorted(result, key=lambda entry: entry[1], reverse=False)
-        sample, score, ppp, state = zip(*sorted_result)
-        return sample, score, ppp, state
+        sample, score, attention_probs, state = zip(*sorted_result)
+        return sample, score, attention_probs, state
 
 
 class FnnDecoder(Model):
@@ -1892,7 +1914,7 @@ class NRM(Model):
         return sample, np.exp(score), ppp
 
 
-    def generate_multiple(self, inputs, mode='display', return_attend=False, return_all=True, all_ngram=True):
+    def generate_multiple(self, inputs, mode='display', return_attend=False, return_all=True, generate_ngram=True):
         # assert self.config['sample_stoch'], 'RNNLM sampling must be stochastic'
         # assert not self.config['sample_argmax'], 'RNNLM sampling cannot use argmax'
         args = dict(k=self.config['sample_beam'],
@@ -1901,7 +1923,7 @@ class NRM(Model):
                     argmax=self.config['sample_argmax'] if mode == 'display' else None,
                     return_attend=return_attend,
                     type=self.config['predict_type'],
-                    all_ngram=True
+                    generate_ngram=generate_ngram
                     )
         '''
         Return the encoding of input.
@@ -1912,9 +1934,9 @@ class NRM(Model):
 
         """
         return
-            X_out:  a list of vectors [nb_sample, max_len, 2*enc_hidden_dim], encoding of each time state (concatenate both forward and backward RNN)
+            context:  a list of vectors [nb_sample, max_len, 2*enc_hidden_dim], encoding of each time state (concatenate both forward and backward RNN)
             _:      embedding of text X [nb_sample, max_len, enc_embedd_dim]
-            X_mask: mask, an array showing which elements in X are not 0 [nb_sample, max_len]
+            c_mask: mask, an array showing which elements in context are not 0 [nb_sample, max_len]
             _: encoding of end of X, seems not make sense for bidirectional model (head+tail) [nb_sample, 2*enc_hidden_dim]
             Z:  value of update gate, shape=(nb_sample, 1)
             R:  value of update gate, shape=(nb_sample, 1)

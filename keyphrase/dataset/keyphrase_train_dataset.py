@@ -55,7 +55,7 @@ def load_data_and_dict(training_dataset):
     testing_names       = config['testing_datasets'] # only these three may have overlaps with training data
     testing_records     = {}
 
-    # rule out the ones appear in testing data
+    # rule out the ones appear in testing data: 'inspec', 'krapivin', 'nus', 'semeval'
     print('Filtering testing dataset from training data')
     for dataset_name in testing_names:
         print(dataset_name)
@@ -69,13 +69,12 @@ def load_data_and_dict(training_dataset):
 
 
     print('Process the data')
-    training_records, train_pairs, wordfreq         = dataset_utils.load_pairs(title_dict.values(), filter=True)
+    training_records, train_pairs, wordfreq         = dataset_utils.load_pairs(title_dict.values(), do_filter=True)
     print('#(Training Data after Filtering Noises)=%d' % len(training_records))
 
     print('Preparing development data')
     training_records    = numpy.asarray(training_records)
     train_pairs         = numpy.asarray(train_pairs)
-    validation_ids      = numpy.random.randint(0, len(training_records), config['validation_size'])
     # keep a copy of validation data
     if 'validation_id' in config and os.path.exists(config['validation_id']):
         validation_ids = deserialize_from_file(config['validation_id'])
@@ -83,8 +82,8 @@ def load_data_and_dict(training_dataset):
         serialize_to_file(validation_records, config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_record_'+str(config['validation_size'])+'.pkl')
         exit()
     else:
+        validation_ids      = numpy.random.randint(0, len(training_records), config['validation_size'])
         serialize_to_file(validation_ids, config['validation_id'])
-
 
     validation_records  = training_records[validation_ids]
     validation_pairs    = train_pairs[validation_ids]
@@ -102,20 +101,35 @@ def load_data_and_dict(training_dataset):
 
     print('#(Training Data after Filtering Validate & Test data)=%d' % len(train_pairs))
 
-
     print('Preparing testing data KE20k')
-    testing_ids         = numpy.random.randint(0, len(training_records), config['validation_size'])
     # keep a copy of testing data
     if 'testing_id' in config and os.path.exists(config['testing_id']):
         testing_ids = deserialize_from_file(config['testing_id'])
+        testing_ids = filter(lambda x:x<len(training_records), testing_ids)
     else:
+        testing_ids         = numpy.random.randint(0, len(training_records), config['validation_size'])
         serialize_to_file(testing_ids, config['testing_id'])
     testing_records['ke20k']  = training_records[testing_ids]
     training_records          = numpy.delete(training_records, testing_ids, axis=0)
     train_pairs               = numpy.delete(train_pairs, testing_ids, axis=0)
 
+    # path = '/home/memray/Project/deep_learning/seq2seq-keyphrase/dataset/keyphrase/baseline-data/ke20k/'
+    # keyphrase_count = 0
+    # for i,r in enumerate(testing_records['ke20k']):
+    #     with open(path+'text/'+ str(i) +'.txt', 'w') as f:
+    #         f.write(r['title']+'. \n'+r['abstract'])
+    #     with open(path+'keyphrase/'+ str(i) +'.txt', 'w') as f:
+    #         keyphrases = re.sub(r'\(.*?\)', ' ', r['keyword'])
+    #         keyphrases = re.split('[,;]',keyphrases)
+    #         keyphrase_count += len(keyphrases)
+    #         f.write('\n'.join(keyphrases))
+    #
+    # print('length of testing ids: %d' % len(testing_ids))
+    # print('length of actually testing samples: %d' % len(testing_records['ke20k']))
+    # print('average number of keyphrases: %f' % (float(keyphrase_count)/ float(len(testing_records['ke20k']))))
+    # exit()
 
-    test_pairs                = dict([(k, load_pairs(v, filter=False)[1]) for (k,v) in testing_records.items()])
+    test_pairs                = dict([(k, dataset_utils.load_pairs(v, do_filter=False)[1]) for (k,v) in testing_records.items()])
 
     print('Building dicts')
     # if voc exists and is assigned, load it, overwrite the wordfreq
@@ -156,10 +170,11 @@ if __name__ == '__main__':
     # # export vocabulary to file for manual check
     # wordfreq = sorted(wordfreq.items(), key=lambda a: a[1], reverse=True)
     # serialize_to_file(wordfreq, config['voc'])
-    wordfreq = deserialize_from_file(config['voc'])
-    with open(config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'/voc_list.txt', 'w') as f_:
-        for (k,f) in wordfreq:
-            f_.write('%s\t%d\n' % (k,f))
+
+    # wordfreq = deserialize_from_file(config['voc'])
+    # with open(config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'/voc_list.txt', 'w') as f_:
+    #     for (k,f) in wordfreq:
+    #         f_.write('%s\t%d\n' % (k,f))
 
     # train_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
     # print('Load successful: vocsize=%d'% len(idx2word))

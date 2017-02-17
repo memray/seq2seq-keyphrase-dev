@@ -2,6 +2,7 @@ import math
 import logging
 import string
 
+import scipy
 from nltk.stem.porter import *
 import numpy as np
 
@@ -9,58 +10,54 @@ import os
 import sys
 import keyphrase.config as config
 # prepare logging.
+from keyphrase.dataset import dataset_utils
+import keyphrase.config
+
+# config = keyphrase.config.setup_keyphrase_all()
 config = config.setup_keyphrase_baseline()  # load settings.
-def init_logging(logfile):
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(module)s: %(message)s',
-                                  datefmt='%m/%d/%Y %H:%M:%S'   )
-    fh = logging.FileHandler(logfile)
-    # ch = logging.StreamHandler()
-    ch = logging.StreamHandler(sys.stdout)
 
-    fh.setFormatter(formatter)
-    ch.setFormatter(formatter)
-    # fh.setLevel(logging.INFO)
-    ch.setLevel(logging.INFO)
-    logging.getLogger().addHandler(ch)
-    logging.getLogger().addHandler(fh)
-    logging.getLogger().setLevel(logging.INFO)
-
-    return logging
-
-print('Log path: %s' % (
-config['path_experiment'] + '/experiments.{0}.id={1}.log'.format(config['task_name'], config['timemark'])))
-logger = init_logging(
-    config['path_experiment'] + '/experiments.{0}.id={1}.log'.format(config['task_name'], config['timemark']))
-
-logger = logging.getLogger(__name__)
-
-
-def load_phrase(file_path):
+def load_phrase(file_path, tokenize=True):
     phrases = []
     with open(file_path, 'r') as f:
-        phrases = [l.split() for l in f.readlines()]
-    return phrases
+        # TODO here the ground-truth is already after processing, contains <digit>, not good for baseline methods...
+        if tokenize:
+            phrase_str = ';'.join([l.strip() for l in f.readlines()])
+            phrases = dataset_utils.process_keyphrase(phrase_str)
+        else:
+            phrases = [l.strip().split(' ') for l in f.readlines()]
+        return phrases
 
 def evaluate_(text_dir, target_dir, prediction_dir, model_name, dataset_name, do_stem=True):
     '''
     '''
     stemmer = PorterStemmer()
 
+    print('Evaluating on %s@%s' % (model_name, dataset_name))
     # Evaluation part
     micro_metrics = []
     micro_matches = []
 
     doc_names = [name[:name.index('.')] for name in os.listdir(text_dir)]
 
+    number_groundtruth = 0
+    number_present_groundtruth = 0
+
     for doc_name in doc_names:
+        logger.info('[FILE]{0}'.format(text_dir+'/'+doc_name+'.txt'))
         with open(text_dir+'/'+doc_name+'.txt', 'r') as f:
             text_tokens = (' '.join(f.readlines())).split( )
+
             text    = [t.split('_')[0] for t in text_tokens]
             postag  = [t.split('_')[1] for t in text_tokens]
 
-        targets = load_phrase(target_dir+'/'+doc_name+'.txt')
+        targets = load_phrase(target_dir+'/'+doc_name+'.txt', True)
 
-        predictions = load_phrase(prediction_dir+'/'+doc_name+'.txt.phrases')
+        predictions = load_phrase(prediction_dir+'/'+doc_name+'.txt.phrases', False)
+
+        # do processing to baseline predictions
+        if (not model_name.startswith('CopyRNN')) and (not model_name.startswith('RNN')):
+            predictions = dataset_utils.process_keyphrase(';'.join([' '.join(p) for p in predictions]))
+
         correctly_matched = np.asarray([0] * len(predictions), dtype='int32')
 
         print(targets)
@@ -69,7 +66,48 @@ def evaluate_(text_dir, target_dir, prediction_dir, model_name, dataset_name, do
 
         # convert target index into string
         if do_stem:
+            stemmed_input    = [stemmer.stem(t).strip().lower() for t in text]
             targets = [[stemmer.stem(w).strip().lower() for w in target] for target in targets]
+
+        if 'target_filter' in config:
+            present_targets = []
+
+            for target in targets:
+                keep = True
+                # whether do filtering on groundtruth phrases. if config['target_filter']==None, do nothing
+                match = None
+                for i in range(len(stemmed_input) - len(target) + 1):
+                    match = None
+                    for j in range(len(target)):
+                        if target[j] != stemmed_input[i + j]:
+                            match = False
+                            break
+                    if j == len(target) - 1 and match == None:
+                        match = True
+                        break
+
+                if match == True:
+                    # if match and 'appear-only', keep this phrase
+                    if config['target_filter'] == 'appear-only':
+                        keep = keep and True
+                    elif config['target_filter'] == 'non-appear-only':
+                        keep = keep and False
+                elif match == False:
+                    # if not match and 'appear-only', discard this phrase
+                    if config['target_filter'] == 'appear-only':
+                        keep = keep and False
+                    # if not match and 'non-appear-only', keep this phrase
+                    elif config['target_filter'] == 'non-appear-only':
+                        keep = keep and True
+
+                if not keep:
+                    continue
+
+                present_targets.append(target)
+
+            number_groundtruth += len(targets)
+            number_present_groundtruth += len(present_targets)
+            targets = present_targets
 
         printable = set(string.printable)
         # lines = [filter(lambda x: x in printable, l) for l in lines]
@@ -176,10 +214,20 @@ def evaluate_(text_dir, target_dir, prediction_dir, model_name, dataset_name, do
 
         logger.info('*' * 100)
 
+    logger.info('#(Ground-truth Keyphrase)=%d' % number_groundtruth)
+    logger.info('#(Present Ground-truth Keyphrase)=%d' % number_present_groundtruth)
+
+    '''
+    Export the f@5 and f@10 for significance test
+    '''
+    for k in [5, 10]:
+        with open(config['predict_path'] + '/micro-f@%d-' % (k) + model_name+'-'+dataset_name+'.txt', 'w') as writer:
+            writer.write('\n'.join([str(m['f1@%d' % k]) for m in micro_metrics]))
+
     '''
     Compute the corpus evaluation
     '''
-    # csv_writer = open(config['path_experiment'] + '/' + model_name+'-'+dataset_name+'.txt', 'w')
+    csv_writer = open(config['predict_path'] + '/evaluate-' + model_name+'-'+dataset_name+'.txt', 'w')
 
     real_test_size = len(doc_names)
     overall_score = {}
@@ -196,6 +244,7 @@ def evaluate_(text_dir, target_dir, prediction_dir, model_name, dataset_name, do
         overall_score['r@%d' % k] = float(sum([m['r@%d' % k] for m in micro_metrics])) / float(real_test_size)
         overall_score['f1@%d' % k] = float(sum([m['f1@%d' % k] for m in micro_metrics])) / float(real_test_size)
 
+        # Print basic statistics
         logger.info('%s@%s' % (model_name, dataset_name))
         output_str = 'Overall - %s valid testing data=%d, Number of Target=%d/%d, Number of Prediction=%d, Number of Correct=%d' % (
                     config['predict_type'], real_test_size,
@@ -203,6 +252,7 @@ def evaluate_(text_dir, target_dir, prediction_dir, model_name, dataset_name, do
                     overall_prediction_number, correct_number
         )
         logger.info(output_str)
+        # Print micro-average performance
         output_str = 'Micro:\t\tP@%d=%f, R@%d=%f, F1@%d=%f' % (
                     k, overall_score['p@%d' % k],
                     k, overall_score['r@%d' % k],
@@ -215,7 +265,7 @@ def evaluate_(text_dir, target_dir, prediction_dir, model_name, dataset_name, do
                     overall_score['f1@%d' % k]
         ))
 
-        # Compute the Macro Measures
+        # Print macro-average performance
         overall_score['macro_p@%d' % k] = correct_number / float(overall_prediction_number)
         overall_score['macro_r@%d' % k] = correct_number / float(overall_target_number)
         if overall_score['macro_p@%d' % k] + overall_score['macro_r@%d' % k] > 0:
@@ -249,19 +299,82 @@ def evaluate_(text_dir, target_dir, prediction_dir, model_name, dataset_name, do
         logger.info(output_str)
     csv_writer.close()
 
-base_dir = '/Users/memray/Project/Keyphrase_Extractor-UTD/'
-models = ['Kea'] # 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'Kea'
-test_sets = config['testing_datasets']
 
-if __name__ == '__main__':
+
+def init_logging(logfile):
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(module)s: %(message)s',
+                                  datefmt='%m/%d/%Y %H:%M:%S')
+    fh = logging.FileHandler(logfile)
+    # ch = logging.StreamHandler()
+    ch = logging.StreamHandler(sys.stdout)
+
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    # fh.setLevel(logging.INFO)
+    ch.setLevel(logging.INFO)
+    logging.getLogger().addHandler(ch)
+    logging.getLogger().addHandler(fh)
+    logging.getLogger().setLevel(logging.INFO)
+
+    return logging
+
+print('Log path: %s' % (
+    config['path_experiment'] + '/experiments.{0}.id={1}.log'.format(config['task_name'], config['timemark'])))
+logger = init_logging(
+    config['path_experiment'] + '/experiments.{0}.id={1}.log'.format(config['task_name'], config['timemark']))
+logger = logging.getLogger(__name__)
+
+
+
+
+def evaluate_baselines():
+    '''
+    evaluate baselines' performance
+    :return:
+    '''
+    # base_dir = '/Users/memray/Project/Keyphrase_Extractor-UTD/'
+    # 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'KEA', 'RNN_present', 'CopyRNN_present_singleword=0'
+    models = ['CopyRNN_present_singleword=1', 'CopyRNN_present_singleword=2']
+
+    test_sets = config['testing_datasets']
+
     for model_name in models:
         for dataset_name in test_sets:
             text_dir       = config['baseline_data_path'] + dataset_name + '/text/'
             target_dir     = config['baseline_data_path'] + dataset_name + '/keyphrase/'
-            prediction_dir =  base_dir + model_name + '/output/' +  dataset_name
-            if model_name == 'Maui':
-                prediction_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/maui_output/' + dataset_name
-            if model_name == 'Kea':
-                prediction_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/kea_output/' + dataset_name
+
+            base_dir = config['path'] + '/dataset/keyphrase/prediction/' + model_name + '/'
+            prediction_dir = base_dir + dataset_name
+
+            #if model_name == 'Maui':
+            #    prediction_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/maui_output/' + dataset_name
+            #if model_name == 'Kea':
+            #    prediction_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/kea_output/' + dataset_name
 
             evaluate_(text_dir, target_dir, prediction_dir, model_name, dataset_name)
+
+def significance_test():
+    model1 = 'CopyRNN'
+    models = ['TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'RNN', 'CopyRNN']
+
+    test_sets = config['testing_datasets']
+
+    def load_result(filepath):
+        with open(filepath, 'r') as reader:
+            return [float(l.strip()) for l in reader.readlines()]
+
+    for model2 in models:
+        print('*'*20 + '  %s Vs. %s  ' % (model1, model2) + '*' * 20)
+        for dataset_name in test_sets:
+            for k in [5, 10]:
+                print('Evaluating on %s@%d' % (dataset_name, k))
+                filepath = config['predict_path'] + '/micro-f@%d-' % (k) + model1 + '-' + dataset_name + '.txt'
+                val1 = load_result(filepath)
+                filepath = config['predict_path'] + '/micro-f@%d-' % (k) + model2 + '-' + dataset_name + '.txt'
+                val2 = load_result(filepath)
+                s_test = scipy.stats.wilcoxon(val1, val2)
+                print(s_test)
+
+if __name__ == '__main__':
+    evaluate_baselines()
+    # significance_test()
