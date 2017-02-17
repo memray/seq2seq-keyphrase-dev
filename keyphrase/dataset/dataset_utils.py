@@ -63,8 +63,8 @@ def get_tokens(text, type=1):
 
     return tokens
 
-def process_keyphrase(record):
-    keyphrases = record['keyword'].lower()
+def process_keyphrase(keyword_str):
+    keyphrases = keyword_str.lower()
     # replace abbreviations
     keyphrases = re.sub(r'\(.*?\)', ' ', keyphrases)
     # pad whitespace before and after punctuations
@@ -121,7 +121,7 @@ def load_pairs(records, filter=False):
     for id, record in enumerate(records):
         text        = prepare_text(record, tokenize_sentence = False)
         tokens      = get_tokens(text)
-        keyphrases  = process_keyphrase(record)
+        keyphrases  = process_keyphrase(record['keyword'])
 
         for w in tokens:
             if w not in wordfreq:

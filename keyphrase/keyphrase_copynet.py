@@ -192,12 +192,16 @@ if __name__ == '__main__':
     logger.info('*' * 50)
 
     train_set, validation_set, test_sets, idx2word, word2idx = deserialize_from_file(config['dataset'])
-    test_sets = keyphrase_test_dataset.load_additional_testing_data(config['testing_datasets'], idx2word, word2idx, config)
+    # test_sets = keyphrase_test_dataset.load_additional_testing_data(config['testing_datasets'], idx2word, word2idx, config)
 
+    print(len(train_set['source']))
     print(len(train_set['target']))
     print(sum([len(t) for t in train_set['target']]))
 
     logger.info('Load data done.')
+
+    exit()
+
     # data is too large to dump into file, so load from raw dataset directly
     # train_set, test_set, idx2word, word2idx = keyphrase_dataset.load_data_and_dict(config['training_dataset'], config['testing_dataset'])
 

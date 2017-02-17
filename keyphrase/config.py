@@ -47,7 +47,8 @@ def setup_keyphrase_all():
     config['testing_datasets']= ['inspec', 'nus', 'semeval', 'krapivin'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd'
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
-    config['data_process_name'] = 'eos-punctuation-1000validation/'
+    config['data_process_name'] = 'punctuation-20000validation-20000testing/'
+    # config['data_process_name'] = 'eos-punctuation-1000validation/'
 
     config['validation_size'] = 20000
     config['validation_id']   = config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_id_'+str(config['validation_size'])+'.pkl'
@@ -110,8 +111,8 @@ def setup_keyphrase_all():
 
     config['normalize_score']   = True #
     # config['normalize_score']   = True
-    config['target_filter']     = None # 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
-    config['predict_filter']    = None # whether do filtering on predictions? 'appear-only','non-appear-only' and None
+    config['target_filter']     = 'appear-only' # 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
+    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
     config['keep_longest']      = True # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
     config['noun_phrase_only']  = False
     # config['noun_phrase_only']  = True

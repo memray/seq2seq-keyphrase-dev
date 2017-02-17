@@ -69,7 +69,7 @@ def load_data_and_dict(training_dataset):
 
 
     print('Process the data')
-    training_records, train_pairs, wordfreq         = load_pairs(title_dict.values(), filter=True)
+    training_records, train_pairs, wordfreq         = dataset_utils.load_pairs(title_dict.values(), filter=True)
     print('#(Training Data after Filtering Noises)=%d' % len(training_records))
 
     print('Preparing development data')
@@ -79,15 +79,29 @@ def load_data_and_dict(training_dataset):
     # keep a copy of validation data
     if 'validation_id' in config and os.path.exists(config['validation_id']):
         validation_ids = deserialize_from_file(config['validation_id'])
+        validation_records  = training_records[validation_ids]
+        serialize_to_file(validation_records, config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_record_'+str(config['validation_size'])+'.pkl')
+        exit()
     else:
         serialize_to_file(validation_ids, config['validation_id'])
+
 
     validation_records  = training_records[validation_ids]
     validation_pairs    = train_pairs[validation_ids]
     training_records    = numpy.delete(training_records, validation_ids, axis=0)
     train_pairs         = numpy.delete(train_pairs, validation_ids, axis=0)
 
+    #
+    # target_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/ke20k/train/'
+    # for r_id, r in enumerate(validation_records):
+    #     with open(target_dir+r_id+'.txt', 'w') as textfile:
+    #         textfile.write(r.title+'\n'+r.text)
+    #     with open(target_dir + r_id + '.key', 'w') as phrasefile:
+    #         for p in r.phrases:
+    #             phrasefile.write('%s\t1\n' % p)
+
     print('#(Training Data after Filtering Validate & Test data)=%d' % len(train_pairs))
+
 
     print('Preparing testing data KE20k')
     testing_ids         = numpy.random.randint(0, len(training_records), config['validation_size'])
@@ -131,7 +145,7 @@ if __name__ == '__main__':
     config = setup_keyphrase_all()
 
     start_time = time.clock()
-    # train_set, validation_set, test_set, idx2word, word2idx = load_data_and_dict(config['training_dataset'])
+    train_set, validation_set, test_set, idx2word, word2idx = load_data_and_dict(config['training_dataset'])
     # serialize_to_file([train_set, validation_set, test_set, idx2word, word2idx], config['dataset'])
     print('Finish processing and dumping: %d seconds' % (time.clock()-start_time))
 

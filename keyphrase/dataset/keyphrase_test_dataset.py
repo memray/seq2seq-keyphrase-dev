@@ -44,7 +44,7 @@ class DataLoader(object):
         self.basedir = self.basedir
         self.doclist = []
 
-    def get_docs(self):
+    def get_docs(self, return_dict=True):
         '''
         :return: a list of dict instead of the Document object
         '''
@@ -64,7 +64,10 @@ class DataLoader(object):
             newd['keyword']     = ';'.join(d.phrases)
             doclist.append(newd)
 
-        return doclist
+        if return_dict:
+            return doclist
+        else:
+            return self.doclist
 
     def __call__(self, idx2word, word2idx, type = 1):
         self.get_docs()
@@ -177,10 +180,11 @@ class INSPEC(DataLoader):
     def __init__(self, **kwargs):
         super(INSPEC, self).__init__(**kwargs)
         self.datadir = self.basedir + '/dataset/keyphrase/testing-data/INSPEC'
-        # self.textdir = self.datadir + '/all_texts/'
-        # self.keyphrasedir = self.datadir + '/gold_standard_keyphrases_2/'
-        self.textdir = self.datadir + '/test_texts/'
-        self.keyphrasedir = self.datadir + '/gold_standard_test/'
+        self.textdir = self.datadir + '/all_texts/'
+        self.keyphrasedir = self.datadir + '/gold_standard_keyphrases_2/'
+
+        # self.textdir = self.datadir + '/test_texts/'
+        # self.keyphrasedir = self.datadir + '/gold_standard_test/'
 
 class NUS(DataLoader):
     def __init__(self, **kwargs):
@@ -226,7 +230,7 @@ class NUS(DataLoader):
                             f.write(key+'\n')
             # else:
             #     print(self.keyphrasedir + paper_id + '.keywords Not Found')
-    def get_docs(self, only_abstract=True):
+    def get_docs(self, only_abstract=True, return_dict=True):
         '''
         :return: a list of dict instead of the Document object
         The keyphrase in SemEval is already stemmed
@@ -306,16 +310,24 @@ class NUS(DataLoader):
             newd['keyword']     = ';'.join(d.phrases)
             doclist.append(newd)
 
-        return doclist
+        if return_dict:
+            return doclist
+        else:
+            return self.doclist
 
 class SemEval(DataLoader):
     def __init__(self, **kwargs):
         super(SemEval, self).__init__(**kwargs)
-        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/SemEval'
-        self.textdir = self.datadir + '/test/'
-        self.keyphrasedir = self.datadir + '/test_answer/test.combined.stem.final'
+        # self.datadir = self.basedir + '/dataset/keyphrase/testing-data/SemEval'
+        # self.textdir = self.datadir + '/test/'
+        # self.keyphrasedir = self.datadir + '/test_answer/test.combined.stem.final'
 
-    def get_docs(self, only_abstract=True):
+        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/SemEval/train+trial/'
+        self.textdir = self.datadir + '/all_texts/'
+        self.keyphrasedir = self.datadir + '/gold_standard_keyphrases_3/'
+
+
+    def get_docs1(self, only_abstract=True, return_dict=True):
         '''
         :return: a list of dict instead of the Document object
         The keyphrase in SemEval is already stemmed
@@ -329,7 +341,7 @@ class SemEval(DataLoader):
                 self.doclist.append(d)
 
         for d in self.doclist:
-            with open(self.textdir + d.name + '.txt.final', 'r') as f:
+            with open(self.textdir + d.name + '.txt', 'r') as f:
                 import string
                 printable = set(string.printable)
 
@@ -384,7 +396,11 @@ class SemEval(DataLoader):
             newd['keyword']     = ';'.join(d.phrases)
             doclist.append(newd)
 
-        return doclist
+        if return_dict:
+            return doclist
+        else:
+            return self.doclist
+
 
 class KRAPIVIN(DataLoader):
     def __init__(self, **kwargs):
@@ -454,6 +470,42 @@ class DUC2001(DataLoader):
         self.textdir = self.datadir + '/contentsubset/'
         self.keyphrasedir = self.datadir + '/gold/'
 
+class KE20K(DataLoader):
+    def __init__(self, **kwargs):
+        super(KE20K, self).__init__(**kwargs)
+        self.datadir = self.basedir + '/dataset/keyphrase/baseline-data/ke20k/'
+        self.textdir = self.datadir + '/plain_text/'
+        self.keyphrasedir = self.datadir + '/keyphrase/'
+
+    def get_docs(self, return_dict=True):
+        '''
+        :return: a list of dict instead of the Document object
+        '''
+        for fname in os.listdir(self.textdir):
+            d = Document()
+            d.name = fname
+            with open(self.textdir+fname, 'r') as textfile:
+                lines = textfile.readlines()
+                d.title = lines[0].strip()
+                d.text = ' '.join(lines[1:])
+            with open(self.keyphrasedir+fname, 'r') as phrasefile:
+                d.phrases = [l.strip() for l in phrasefile.readlines()]
+            self.doclist.append(d)
+
+        doclist = []
+        for d in self.doclist:
+            newd = {}
+            newd['name']        = d.name
+            newd['abstract']    = re.sub('[\r\n]', ' ', d.text).strip()
+            newd['title']       = re.sub('[\r\n]', ' ', d.title).strip()
+            newd['keyword']     = ';'.join(d.phrases)
+            doclist.append(newd)
+
+        if return_dict:
+            return doclist
+        else:
+            return self.doclist
+
 
 # aliases
 inspec = INSPEC
@@ -464,6 +516,7 @@ kdd = KDD
 www = WWW
 umd = UMD
 duc2001 = DUC2001
+ke20k = KE20K
 # irbooks = IRBooks
 
 def testing_data_loader(identifier, kwargs=None):
@@ -496,6 +549,9 @@ def load_additional_testing_data(testing_names, idx2word, word2idx, config):
 
     return test_sets
 
+
+from nltk.stem.porter import *
+from keyphrase.dataset import dataset_utils
 def check_data():
     config = setup_keyphrase_all()
     train_set, validation_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])
@@ -503,8 +559,74 @@ def check_data():
     for dataset_name in config['testing_datasets']:
         print('*' * 50)
         print(dataset_name)
+
+        number_groundtruth = 0
+        number_present_groundtruth = 0
+
         loader = testing_data_loader(dataset_name, kwargs=dict(basedir = config['path']))
 
+        if dataset_name == 'nus':
+            docs   = loader.get_docs(only_abstract = True, return_dict=False)
+        else:
+            docs   = loader.get_docs(return_dict=False)
+
+        stemmer = PorterStemmer()
+
+        for id,doc in enumerate(docs):
+
+            text_tokens = dataset_utils.get_tokens(doc.title.strip()+' '+ doc.text.strip())
+            if len(text_tokens) > 1500:
+                text_tokens = text_tokens[:1500]
+            # print('[%d] length= %d' % (id, len(doc.text)))
+
+            stemmed_input = [stemmer.stem(t).strip().lower() for t in text_tokens]
+
+            phrase_str = ';'.join([l.strip() for l in doc.phrases])
+            phrases = dataset_utils.process_keyphrase(phrase_str)
+            targets = [[stemmer.stem(w).strip().lower() for w in target] for target in phrases]
+
+            present_targets = []
+
+            for target in targets:
+                keep = True
+                # whether do filtering on groundtruth phrases. if config['target_filter']==None, do nothing
+                match = None
+                for i in range(len(stemmed_input) - len(target) + 1):
+                    match = None
+                    for j in range(len(target)):
+                        if target[j] != stemmed_input[i + j]:
+                            match = False
+                            break
+                    if j == len(target) - 1 and match == None:
+                        match = True
+                        break
+
+                if match == True:
+                    # if match and 'appear-only', keep this phrase
+                    if config['target_filter'] == 'appear-only':
+                        keep = keep and True
+                    elif config['target_filter'] == 'non-appear-only':
+                        keep = keep and False
+                elif match == False:
+                    # if not match and 'appear-only', discard this phrase
+                    if config['target_filter'] == 'appear-only':
+                        keep = keep and False
+                    # if not match and 'non-appear-only', keep this phrase
+                    elif config['target_filter'] == 'non-appear-only':
+                        keep = keep and True
+
+                if not keep:
+                    continue
+
+                present_targets.append(target)
+
+            number_groundtruth += len(targets)
+            number_present_groundtruth += len(present_targets)
+
+        print('number_groundtruth='+str(number_groundtruth))
+        print('number_present_groundtruth='+str(number_present_groundtruth))
+
+        '''
         test_set, doclist = loader(idx2word, word2idx, type=0)
         test_data_plain = zip(*(test_set['source'], test_set['target'], doclist))
 
@@ -520,6 +642,7 @@ def check_data():
                 print('!' * 100)
                 print('Error found')
                 print('%d - %d : %d   name=%s, title=%d, text=%d, len(keyphrase)=%d' % (idx, len(test_s_o), len(test_t_o), doc.name, len(doc.title), len(doc.text), len(''.join(target))))
+        '''
 
 def add_padding(data):
     shapes = [np.asarray(sample).shape for sample in data]
@@ -608,8 +731,10 @@ def check_postag(config):
             print(text)
 
 if __name__ == '__main__':
-    config = setup_keyphrase_all()
-    check_postag(config)
+    check_data()
+
+    # config = setup_keyphrase_all()
+    # check_postag(config)
             # if len(test_t_o) < 3:
             #
             #     doc.text = re.sub(r'[\r\n\t]', ' ', doc.text)

@@ -200,6 +200,48 @@ def export_krapivin_maui():
         with open(test_dir + str(i) + '.key', 'w') as f:
             f.write('\n'.join([' '.join(t)+'\t1' for t in test_target]))
 
+def export_ke20k_testing_maui():
+    from keyphrase.dataset import keyphrase_test_dataset
+    target_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/ke20k/'
+
+    config  = keyphrase.config.setup_keyphrase_all()   # load settings.
+    doc_list = keyphrase_test_dataset.testing_data_loader('ke20k', kwargs=dict(basedir = config['path'])).get_docs(False)
+
+    for d in doc_list:
+        d_id = d.name[:d.name.find('.txt')]
+        print(d_id)
+        with open(target_dir+d_id+'.txt', 'w') as textfile:
+            textfile.write(d.title+'\n'+d.text)
+        with open(target_dir + d_id + '.key', 'w') as phrasefile:
+            for p in d.phrases:
+                phrasefile.write('%s\t1\n' % p)
+
+def export_ke20k_train_maui():
+    '''
+    just use the validation dataset
+    :return:
+    '''
+    config  = keyphrase.config.setup_keyphrase_all()   # load settings.
+    target_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/ke20k/train/'
+
+    import emolga,string
+
+    printable = set(string.printable)
+    validation_records = emolga.dataset.build_dataset.deserialize_from_file(config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_record_'+str(config['validation_size'])+'.pkl')
+    for r_id, r in enumerate(validation_records):
+        print(r_id)
+
+        r['title'] = filter(lambda x: x in printable, r['title'])
+        r['abstract'] = filter(lambda x: x in printable, r['abstract'])
+        r['keyword'] = filter(lambda x: x in printable, r['keyword'])
+
+        with open(target_dir+str(r_id)+'.txt', 'w') as textfile:
+            textfile.write(r['title']+'\n'+r['abstract'])
+
+        with open(target_dir + str(r_id) + '.key', 'w') as phrasefile:
+            for p in r['keyword'].split(';'):
+                phrasefile.write('%s\t1\n' % p)
+
 def prepare_data_cross_validation(input_dir, output_dir, folds=5):
     file_names = [ w[:w.index('.')] for w in filter(lambda x: x.endswith('.txt'),os.listdir(input_dir))]
     file_names.sort()
@@ -238,6 +280,9 @@ def prepare_data_cross_validation(input_dir, output_dir, folds=5):
 if __name__ == '__main__':
     # export_krapivin_maui()
     # export_maui()
-    input_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/nus/'
-    output_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/nus/cross_validation/'
-    prepare_data_cross_validation(input_dir, output_dir, folds=5)
+    # input_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/ke20k/'
+    # output_dir = '/Users/memray/Project/seq2seq-keyphrase/dataset/keyphrase/baseline-data/maui/ke20k/cross_validation/'
+    # prepare_data_cross_validation(input_dir, output_dir, folds=5)
+
+    # export_ke20k_maui()
+    export_ke20k_train_maui()
