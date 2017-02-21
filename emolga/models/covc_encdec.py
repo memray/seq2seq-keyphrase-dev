@@ -1340,7 +1340,7 @@ class DecoderAtt(Decoder):
                     # if (new_hyp_states[idx][-1] == 0) and (not fixlen):
                     if (new_hyp_samples[idx][-1] == 0 and not fixlen):
                         '''
-                        predict a <eos>, this sequence is done
+                        predict an <eos>, this sequence is done
                         put successful prediction into result list
                         '''
                         # worth-noting that if the word index is larger than voc_size, it means a OOV word
@@ -1914,7 +1914,7 @@ class NRM(Model):
         return sample, np.exp(score), ppp
 
 
-    def generate_multiple(self, inputs, mode='display', return_attend=False, return_all=True, generate_ngram=True):
+    def generate_multiple(self, inputs, mode='display', return_attend=False, return_all=True, return_encoding=True):
         # assert self.config['sample_stoch'], 'RNNLM sampling must be stochastic'
         # assert not self.config['sample_argmax'], 'RNNLM sampling cannot use argmax'
         args = dict(k=self.config['sample_beam'],
@@ -1922,8 +1922,7 @@ class NRM(Model):
                     stochastic=self.config['sample_stoch'] if mode == 'display' else None,
                     argmax=self.config['sample_argmax'] if mode == 'display' else None,
                     return_attend=return_attend,
-                    type=self.config['predict_type'],
-                    generate_ngram=generate_ngram
+                    type=self.config['predict_type']
                     )
         '''
         Return the encoding of input.
@@ -1961,20 +1960,12 @@ class NRM(Model):
                 expLoc  = np.repeat(expLoc, context.shape[0], axis=0)
                 context = np.concatenate([context, expLoc], axis=2)
 
-        sample, score, ppp, _    = self.decoder.get_sample(context, c_mask, inputs, **args)
+        sample, score, ppp, output_encoding    = self.decoder.get_sample(context, c_mask, inputs, **args)
         if return_all:
-            return sample, score
-
-        if not args['stochastic']:
-            score  = score / np.array([len(s) for s in sample])
-            idz    = score.argmin()
-            sample = sample[idz]
-            score  = score.min()
-            ppp    = ppp[idz]
-        else:
-            score /= float(len(sample))
-
-        return sample, np.exp(score)
+            if return_encoding:
+                return context, sample, score, output_encoding
+            else:
+                return sample, score
 
     def evaluate_(self, inputs, outputs, idx2word, inputs_unk=None, encode=True):
         def cut_zero_yes(sample, idx2word, ppp=None, Lmax=None):

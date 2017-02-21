@@ -522,9 +522,9 @@ class DUC2001(DataLoader):
         self.textdir = self.datadir + '/contentsubset/'
         self.keyphrasedir = self.datadir + '/gold/'
 
-class KE20K(DataLoader):
+class KE20k(DataLoader):
     def __init__(self, **kwargs):
-        super(KE20K, self).__init__(**kwargs)
+        super(KE20k, self).__init__(**kwargs)
         self.datadir = self.basedir + '/dataset/keyphrase/baseline-data/ke20k/'
         self.textdir = self.datadir + '/plain_text/'
         self.keyphrasedir = self.datadir + '/keyphrase/'
@@ -627,6 +627,85 @@ class DUC(DataLoader):
             #     os.remove(self.textdir+text_file)
         print(count)
 
+class KE20k(DataLoader):
+    def __init__(self, **kwargs):
+        super(KE20k, self).__init__(**kwargs)
+        self.datadir = self.basedir + '/dataset/keyphrase/baseline-data/ke20k/'
+        self.textdir = self.datadir + '/plain_text/'
+        self.keyphrasedir = self.datadir + '/keyphrase/'
+
+    def get_docs(self, return_dict=True):
+        '''
+        :return: a list of dict instead of the Document object
+        '''
+        for fname in os.listdir(self.textdir):
+            d = Document()
+            d.name = fname
+            with open(self.textdir + fname, 'r') as textfile:
+                lines = textfile.readlines()
+                d.title = lines[0].strip()
+                d.text = ' '.join(lines[1:])
+            with open(self.keyphrasedir + fname, 'r') as phrasefile:
+                d.phrases = [l.strip() for l in phrasefile.readlines()]
+            self.doclist.append(d)
+
+        doclist = []
+        for d in self.doclist:
+            newd = {}
+            newd['name'] = d.name
+            newd['abstract'] = re.sub('[\r\n]', ' ', d.text).strip()
+            newd['title'] = re.sub('[\r\n]', ' ', d.title).strip()
+            newd['keyword'] = ';'.join(d.phrases)
+            doclist.append(newd)
+
+        if return_dict:
+            return doclist
+        else:
+            return self.doclist
+
+class IRBooks(DataLoader):
+    def __init__(self, **kwargs):
+        super(IRBooks, self).__init__(**kwargs)
+        self.datadir = self.basedir + '/dataset/keyphrase/testing-data/Textbooks/'
+        self.textdir = self.datadir + '/ir_textbook.txt'
+        # self.keyphrasedir = self.datadir + '/keyphrase/'
+
+    def get_docs(self, return_dict=True):
+        '''
+        :return: a list of dict instead of the Document object
+        '''
+        with open(self.textdir, 'r') as textfile:
+            for line in textfile.readlines():
+                d = Document()
+                text_id         = line[:line.index('\t')]
+                text_content    = line[line.index('\t'):]
+                d.name          = text_id.strip()
+                d.title         = text_content[:text_content.index('  ')].strip()
+                d.text          = text_content[text_content.index('  '):].strip()
+                d.phrases       = []
+
+                if len(d.text.split()) > 2000:
+                    print('[length=%d]%s - %s' % (len(d.text.split()), d.name, d.title))
+                self.doclist.append(d)
+
+                # with open(self.keyphrasedir + fname, 'r') as phrasefile:
+                #     d.phrases = [l.strip() for l in phrasefile.readlines()]
+
+        doclist = []
+        for d in self.doclist:
+            newd = {}
+            newd['name'] = d.name
+            newd['abstract'] = re.sub('[\r\n]', ' ', d.text).strip()
+            newd['title'] = re.sub('[\r\n]', ' ', d.title).strip()
+            newd['keyword'] = ';'.join(d.phrases)
+            doclist.append(newd)
+
+        if return_dict:
+            return doclist
+        else:
+            return self.doclist
+
+
 # aliases
 inspec = INSPEC
 nus = NUS
@@ -637,7 +716,7 @@ www = WWW
 umd = UMD
 ke20k = KE20k
 duc = DUC
-# irbooks = IRBooks
+irbooks = IRBooks
 
 def testing_data_loader(identifier, kwargs=None):
     '''
@@ -648,7 +727,7 @@ def testing_data_loader(identifier, kwargs=None):
                            kwargs=kwargs)
     return data_loader
 
-def load_additional_testing_data(testing_names, idx2word, word2idx, config):
+def load_additional_testing_data(testing_names, idx2word, word2idx, config, postagging=True):
     test_sets           = {}
 
     # rule out the ones appear in testing data
@@ -658,21 +737,24 @@ def load_additional_testing_data(testing_names, idx2word, word2idx, config):
         if os.path.exists(config['path'] + '/dataset/keyphrase/'+config['data_process_name']+dataset_name+'.testing.pkl'):
             test_set = deserialize_from_file(config['path'] + '/dataset/keyphrase/'+config['data_process_name']+dataset_name+'.testing.pkl')
         else:
-            dataloader = testing_data_loader(dataset_name, kwargs=dict(basedir=config['path']))
-            records = dataloader.get_docs()
-            records, pairs, _ = utils.load_pairs(records, do_filter=False)
-            test_set   = utils.build_data(pairs, idx2word, word2idx)
-            tagged_sources = get_postag_with_record(records, pairs)
+            dataloader          = testing_data_loader(dataset_name, kwargs=dict(basedir=config['path']))
+            records             = dataloader.get_docs()
+            records, pairs, _   = utils.load_pairs(records, do_filter=False)
+            test_set            = utils.build_data(pairs, idx2word, word2idx)
 
             test_set['record']          = records
-            test_set['tagged_source']   = [[t[1] for t in s] for s in tagged_sources]
-            serialize_to_file(test_set, config['path'] + '/dataset/keyphrase/'+config['data_process_name']+dataset_name+'.testing.pkl')
 
-            if hasattr(dataloader, 'text_postag_dir') and dataloader.__getattribute__('text_postag_dir') != None:
-                for r_, p_, s_ in zip(records, pairs, tagged_sources):
-                    with open(dataloader.text_postag_dir+ '/' + r_['name'] + '.txt', 'w') as f:
-                        output_str = ' '.join([w+'_'+t for w,t in s_])
-                        f.write(output_str)
+            if postagging:
+                tagged_sources = get_postag_with_record(records, pairs)
+                test_set['tagged_source']   = [[t[1] for t in s] for s in tagged_sources]
+
+                if hasattr(dataloader, 'text_postag_dir') and dataloader.__getattribute__('text_postag_dir') != None:
+                    for r_, p_, s_ in zip(records, pairs, tagged_sources):
+                        with open(dataloader.text_postag_dir+ '/' + r_['name'] + '.txt', 'w') as f:
+                            output_str = ' '.join([w+'_'+t for w,t in s_])
+                            f.write(output_str)
+
+            serialize_to_file(test_set, config['path'] + '/dataset/keyphrase/'+config['data_process_name']+dataset_name+'.testing.pkl')
 
         test_sets[dataset_name] = test_set
 
@@ -704,9 +786,9 @@ def check_data():
         for id,doc in enumerate(docs):
 
             text_tokens = dataset_utils.get_tokens(doc.title.strip()+' '+ doc.text.strip())
-            if len(text_tokens) > 1500:
-                text_tokens = text_tokens[:1500]
-            # print('[%d] length= %d' % (id, len(doc.text)))
+            # if len(text_tokens) > 1500:
+            #     text_tokens = text_tokens[:1500]
+            print('[%d] length= %d' % (id, len(doc.text)))
 
             stemmed_input = [stemmer.stem(t).strip().lower() for t in text_tokens]
 

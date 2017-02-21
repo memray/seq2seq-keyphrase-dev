@@ -192,15 +192,13 @@ if __name__ == '__main__':
     logger.info('*' * 50)
 
     train_set, validation_set, test_sets, idx2word, word2idx = deserialize_from_file(config['dataset'])
-    # test_sets = keyphrase_test_dataset.load_additional_testing_data(config['testing_datasets'], idx2word, word2idx, config)
+    test_sets = keyphrase_test_dataset.load_additional_testing_data(config['testing_datasets'], idx2word, word2idx, config, postagging=False)
 
     print(len(train_set['source']))
     print(len(train_set['target']))
     print(sum([len(t) for t in train_set['target']]))
 
     logger.info('Load data done.')
-
-    exit()
 
     # data is too large to dump into file, so load from raw dataset directly
     # train_set, test_set, idx2word, word2idx = keyphrase_dataset.load_data_and_dict(config['training_dataset'], config['testing_dataset'])
@@ -510,6 +508,10 @@ if __name__ == '__main__':
                 progbar_test = Progbar(test_size, logger)
                 logger.info('Predicting on %s' % dataset_name)
 
+                return_encoding = True
+                input_encodings = []
+                output_encodings = []
+
                 predictions = []
                 scores = []
                 test_s_list = []
@@ -522,7 +524,7 @@ if __name__ == '__main__':
                     source_str, target_str, test_s_o, test_t_o = test_data_plain[idx]
                     print('*'*20 + '  ' + str(idx)+ '  ' + '*'*20)
                     print(source_str)
-                    print(test_s_o)
+                    print('[%d]%s' % (len(test_s_o), str(test_s_o)))
                     print(target_str)
                     print(test_t_o)
                     print('')
@@ -541,12 +543,19 @@ if __name__ == '__main__':
                     inputs_unk = np.asarray(unk_filter(np.asarray(test_s, dtype='int32')), dtype='int32')
                     # inputs_ = np.asarray(test_s, dtype='int32')
 
-                    prediction, score = agent.generate_multiple(inputs_unk[None, :], return_all=True, generate_ngram=config['generate_ngram'])
+
+                    if return_encoding:
+                        input_encoding, prediction, score, output_encoding = agent.generate_multiple(inputs_unk[None, :], return_all=True, return_encoding=return_encoding)
+                        input_encodings.append(input_encoding)
+                        output_encodings.append(output_encoding)
+                    else:
+                        prediction, score = agent.generate_multiple(inputs_unk[None, :], return_all=True, return_encoding=return_encoding)
+
                     predictions.append(prediction)
                     scores.append(score)
                     progbar_test.update(idx, [])
                 # store predictions in file
-                serialize_to_file([test_set, test_s_list, test_t_list, test_s_o_list, test_t_o_list, predictions, scores, idx2word], config['predict_path']+'predict.{0}.{1}.pkl'.format(config['predict_type'], dataset_name))
+                serialize_to_file([test_set, test_s_list, test_t_list, test_s_o_list, test_t_o_list, input_encodings, predictions, scores, output_encodings, idx2word], config['predict_path'] + 'predict.{0}.{1}.pkl'.format(config['predict_type'], dataset_name))
 
         '''
         Evaluate on Testing Data
@@ -592,6 +601,7 @@ if __name__ == '__main__':
                 logger.info(overall_score)
                 print_test.close()
 
+        if not do_train:
             exit()
             # write examples to log file
             # # test accuracy
