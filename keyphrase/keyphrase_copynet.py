@@ -13,8 +13,11 @@ import theano
 
 import keyphrase_utils
 from dataset import keyphrase_test_dataset
+import os
 
 theano.config.optimizer='fast_compile'
+os.environ['THEANO_FLAGS'] = 'device=cpu'
+
 from emolga.basic import optimizers
 
 theano.config.exception_verbosity='high'

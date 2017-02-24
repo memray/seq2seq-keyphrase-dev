@@ -95,8 +95,8 @@ def setup_keyphrase_all():
     config['sample_argmax']   = False
 
     config['predict_type']    = 'generative' # type of prediction, extractive or generative
-    config['predict_path']    = config['path_experiment'] + '/predict.' + config['timemark'] + '.data=irbook.len=6.beam='+str(config['sample_beam'])+'.notarget/'
-    # config['predict_path']    = config['path_experiment'] + '/predict.20170217-112805.data=irbook.len=6.beam=50.notarget/'
+    # config['predict_path']    = config['path_experiment'] + '/predict.' + config['timemark'] + '.data=irbook.len=6.beam='+str(config['sample_beam'])+'.notarget/'
+    config['predict_path']    = config['path_experiment'] + '/[active]predict.20170221-161142.data=irbook.len=6.beam=200.notarget/'
     # config['predict_path']    = config['path_experiment'] + '/predict.' + config['predict_type']+ '.'+ config['timemark'] + '.dataset=%d.len=%d.beam=%d.predict=%s-%s.target=%s.keeplongest=%s.noun_phrase=%s/' % (len(config['testing_datasets']),config['max_len'], config['sample_beam'], 'ngram-'if config['generate_ngram'] else '', config['predict_filter'], config['target_filter'], config['keep_longest'], config['noun_phrase_only'])
 
     # config['predict_path']    = config['path_experiment'] + '/predict.20170108-041052.data=4.len=6.beam=50.predict=appear_only/'
