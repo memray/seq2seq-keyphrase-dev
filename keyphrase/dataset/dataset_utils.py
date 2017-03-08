@@ -21,23 +21,28 @@ __author__ = "Rui Meng"
 __email__ = "rui.meng@pitt.edu"
 
 
-def prepare_text(record, tokenize_sentence = False):
+def prepare_text(record, process_type=1):
     '''
+    :param type: 0 is old way, do sentence splitting
+                 1 is new way, keep most of punctuations
+                 2 just return the text, no processing
     concatenate title and abstract, do sentence tokenization if needed
         As I keep most of punctuations (including period), actually I should have stopped doing sentence boundary detection
     '''
-    if (tokenize_sentence):
+    if process_type==0:
         # replace e.g. to avoid noise for sentence boundary detection
         text = record['abstract'].replace('e.g.', 'eg')
         # pad space before and after certain punctuations [_,.<>()'%]
         title = re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', record['title'])
         sents = [re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', s) for s in sent_detector.tokenize(text)]
         text = title + ' ' + SENTENCEDELIMITER + ' ' + (' ' + SENTENCEDELIMITER + ' ').join(sents)
-    else:
+    elif process_type==1:
         text = re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', record['title']) + ' '+SENTENCEDELIMITER + ' ' + re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', record['abstract'])
+    elif process_type==2:
+        text = re.sub(r'[_<>,\(\)\.\'%]', ' \g<0> ', record['abstract'])
     return text
 
-def get_tokens(text, type=1):
+def get_tokens(text, process_type=1):
     '''
     parse the feed-in text, filtering and tokenization
     :param text:
@@ -45,7 +50,7 @@ def get_tokens(text, type=1):
                  1 is new way, keep [_<>,\(\)\.\'%], replace digits to <digit>, split by [^a-zA-Z0-9_<>,\(\)\.\'%]
     :return: a list of tokens
     '''
-    if type == 0:
+    if process_type == 0:
         text = re.sub(r'[\r\n\t]', ' ', text)
 
         # tokenize by non-letters
@@ -53,13 +58,19 @@ def get_tokens(text, type=1):
         # replace the digit terms with <digit>
         tokens = [w if not re.match('^\d+$', w) else DIGIT for w in tokens]
 
-    elif type == 1:
+    elif process_type == 1:
         text = text.lower()
         text = re.sub(r'[\r\n\t]', ' ', text)
         # tokenize by non-letters
         tokens = filter(lambda w: len(w) > 0, re.split(r'[^a-zA-Z0-9_<>,\(\)\.\'%]', text))
         # replace the digit terms with <digit>
         tokens = [w if not re.match('^\d+$', w) else DIGIT for w in tokens]
+
+    elif process_type == 2:
+        text = text.lower()
+        text = re.sub(r'[\r\n\t]', ' ', text)
+        # tokenize by non-letters
+        tokens = filter(lambda w: len(w) > 0, re.split(r'[^a-zA-Z0-9_<>,\(\)\.\'%]', text))
 
     return tokens
 
@@ -113,7 +124,7 @@ def build_data(data, idx2word, word2idx):
             print C
     return instance
 
-def load_pairs(records, do_filter=False):
+def load_pairs(records, process_type=1 ,do_filter=False):
     wordfreq = dict()
     filtered_records = []
     pairs = []
@@ -125,8 +136,8 @@ def load_pairs(records, do_filter=False):
         record['keyword'] = filter(lambda x: x in printable, record['keyword'])
         record['abstract'] = filter(lambda x: x in printable, record['abstract'])
         record['title'] = filter(lambda x: x in printable, record['title'])
-        text        = prepare_text(record, tokenize_sentence = False)
-        tokens      = get_tokens(text)
+        text        = prepare_text(record, process_type)
+        tokens      = get_tokens(text, process_type)
         keyphrases  = process_keyphrase(record['keyword'])
 
         for w in tokens:

@@ -45,7 +45,7 @@ def setup_keyphrase_all():
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['irbooks'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd', 'irbooks'
+    config['testing_datasets']= ['quora'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd', 'irbooks', 'quora'
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
     config['data_process_name'] = 'punctuation-20000validation-20000testing/'
