@@ -44,8 +44,9 @@ class Attention(Layer):
                  return_log=False,
                  Cov=None):
         assert X.ndim + 1 == S.ndim, 'source should be one more dimension than target.'
-        # X is the key:    (nb_samples, x_dim)
-        # S is the source  (nb_samples, maxlen_s, ctx_dim)
+        # X is the decoder representation of t-1:    (nb_samples, hidden_dims)
+        # S is the hidden representation of source text:    (nb_samples, maxlen_s, context_dim)
+        # X_mask: mask, an array showing which elements in X are not 0 [nb_sample, max_len]
         # Cov is the coverage vector (nb_samples, maxlen_s)
 
         if X.ndim == 1:

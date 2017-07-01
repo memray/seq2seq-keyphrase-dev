@@ -225,6 +225,16 @@ if __name__ == '__main__':
     train_data_source = np.array(train_set['source'])
     train_data_target = np.array(train_set['target'])
 
+    count_has_OOV = 0
+    count_all     = 0
+    for phrases in train_data_target:
+        for phrase in phrases:
+            count_all += 1
+            if np.greater(phrase, np.asarray(config['voc_size'])).any():
+                count_has_OOV += 1
+    print('%d / %d' % (count_has_OOV, count_all))
+    exit()
+
     # test_data_plain   = zip(*(test_set['source'],  test_set['target']))
 
     # trunk the over-long input in testing data

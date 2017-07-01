@@ -37,6 +37,19 @@ def build_dict(wordfreq):
 
     return idx2word, word2idx
 
+
+def dump_samples_to_json(records, file_path):
+    '''
+    A temporary function for exporting cleaned data
+    :param records:
+    :param file_path:
+    :return:
+    '''
+    with open(file_path, 'w') as out_file:
+        for record in records:
+            json_line = json.dumps(record)
+            out_file.write(json_line+'\n')
+
 def load_data_and_dict(training_dataset):
     '''
     here dict is built on both training and testing dataset, which may be not suitable (testing data should be unseen)
@@ -47,6 +60,7 @@ def load_data_and_dict(training_dataset):
     print('Loading training dataset')
     f                   = open(training_dataset, 'r')
     training_records    = json.load(f)
+    # filter the duplicates
     title_dict          = dict([(r['title'].strip().lower(), r) for r in training_records])
     print('#(Training Data)=%d' % len(title_dict))
 
@@ -78,9 +92,8 @@ def load_data_and_dict(training_dataset):
     # keep a copy of validation data
     if 'validation_id' in config and os.path.exists(config['validation_id']):
         validation_ids = deserialize_from_file(config['validation_id'])
-        validation_records  = training_records[validation_ids]
-        serialize_to_file(validation_records, config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_record_'+str(config['validation_size'])+'.pkl')
-        exit()
+        # serialize_to_file(validation_records, config['path'] + '/dataset/keyphrase/'+config['data_process_name']+'validation_record_'+str(config['validation_size'])+'.pkl')
+        # exit()
     else:
         validation_ids      = numpy.random.randint(0, len(training_records), config['validation_size'])
         serialize_to_file(validation_ids, config['validation_id'])
@@ -109,9 +122,14 @@ def load_data_and_dict(training_dataset):
     else:
         testing_ids         = numpy.random.randint(0, len(training_records), config['validation_size'])
         serialize_to_file(testing_ids, config['testing_id'])
+
     testing_records['ke20k']  = training_records[testing_ids]
     training_records          = numpy.delete(training_records, testing_ids, axis=0)
     train_pairs               = numpy.delete(train_pairs, testing_ids, axis=0)
+
+    # dump_samples_to_json(training_records, config['path'] + '/dataset/keyphrase/million-paper/ke20k_training.json')
+    # dump_samples_to_json(validation_records, config['path'] + '/dataset/keyphrase/million-paper/ke20k_validation.json')
+    # dump_samples_to_json(testing_records['ke20k'], config['path'] + '/dataset/keyphrase/million-paper/ke20k_testing.json')
 
     # path = '/home/memray/Project/deep_learning/seq2seq-keyphrase/dataset/keyphrase/baseline-data/ke20k/'
     # keyphrase_count = 0
@@ -127,7 +145,7 @@ def load_data_and_dict(training_dataset):
     # print('length of testing ids: %d' % len(testing_ids))
     # print('length of actually testing samples: %d' % len(testing_records['ke20k']))
     # print('average number of keyphrases: %f' % (float(keyphrase_count)/ float(len(testing_records['ke20k']))))
-    # exit()
+    exit()
 
     test_pairs                = dict([(k, dataset_utils.load_pairs(v, do_filter=False)[1]) for (k,v) in testing_records.items()])
 
@@ -161,6 +179,7 @@ if __name__ == '__main__':
     start_time = time.clock()
     train_set, validation_set, test_set, idx2word, word2idx = load_data_and_dict(config['training_dataset'])
     # serialize_to_file([train_set, validation_set, test_set, idx2word, word2idx], config['dataset'])
+
     print('Finish processing and dumping: %d seconds' % (time.clock()-start_time))
 
 

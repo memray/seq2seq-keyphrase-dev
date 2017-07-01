@@ -6,6 +6,7 @@ import numpy as np
 import os
 import copy
 
+import keyphrase.dataset.keyphrase_test_dataset as test_dataset
 from dataset import dataset_utils
 
 logger = logging.getLogger(__name__)
@@ -44,10 +45,15 @@ def evaluate_multiple(config, test_set, inputs, outputs,
 
     model_nickname = config['model_name']  # 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'Kea', 'RNN', 'CopyRNN'
     base_dir = config['path'] + '/dataset/keyphrase/prediction/' + model_nickname + '_' + config['timemark'] + '/'
-    text_dir = config['baseline_data_path'] + dataset_name + '/text/'
-    target_dir = config['baseline_data_path'] + dataset_name + '/keyphrase/'
+    # text_dir = config['baseline_data_path'] + dataset_name + '/text/'
+    # target_dir = config['baseline_data_path'] + dataset_name + '/keyphrase/'
     prediction_dir = base_dir + dataset_name
-    doc_names = [name[:name.index('.')] for name in os.listdir(text_dir)]
+    # doc_names = [name[:name.index('.')] for name in os.listdir(text_dir)]
+
+    loader      = test_dataset.testing_data_loader(dataset_name, kwargs=dict(basedir=config['path']))
+    docs        = loader.get_docs(return_dict=False)
+    doc_names   = [d.name for d in docs]
+
 
     # reload the targets from corpus directly
     # target_dir = config['baseline_data_path'] + dataset_name + '/keyphrase/'

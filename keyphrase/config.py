@@ -41,11 +41,13 @@ def setup_keyphrase_all():
     config['do_validate']     = False
 
     config['training_name']   = 'acm-sci-journal_600k'
+
+    # actually still not clean enough, further filtering is done when loading pairs: dataset_utils.load_pairs()
     config['training_dataset']= config['path'] + '/dataset/keyphrase/million-paper/all_title_abstract_keyword_clean.json'
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['quora'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd', 'irbooks', 'quora'
+    config['testing_datasets']= ['irbooks'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd', 'irbooks', 'quora'
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
     config['data_process_name'] = 'punctuation-20000validation-20000testing/'
@@ -112,10 +114,10 @@ def setup_keyphrase_all():
     # Evaluation
     config['baseline_data_path']     = config['path'] + '/dataset/keyphrase/baseline-data/'
 
-    config['normalize_score']   = True #
+    config['normalize_score']   = False #
     # config['normalize_score']   = True
     config['target_filter']     = None # 'appear-only' # whether do filtering on groundtruth? 'appear-only','non-appear-only' and None
-    config['predict_filter']    = None # whether do filtering on predictions? 'appear-only','non-appear-only' and None
+    config['predict_filter']    = 'appear-only' # whether do filtering on predictions? 'appear-only','non-appear-only' and None
     config['keep_longest']      = False # whether keep the longest phrases only, as there're too many phrases are part of other longer phrases
     config['noun_phrase_only']  = False
     # config['noun_phrase_only']  = True
@@ -225,7 +227,7 @@ def setup_keyphrase_baseline():
     config['testing_name']    = 'inspec_all'
     config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['inspec', 'nus', 'semeval', 'krapivin'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd'
+    config['testing_datasets']= ['ke20k'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd'
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
     config['data_process_name'] = 'eos-punctuation-1000validation/'

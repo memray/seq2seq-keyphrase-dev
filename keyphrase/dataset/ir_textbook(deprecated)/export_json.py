@@ -15,9 +15,9 @@ __email__ = "rui.meng@pitt.edu"
 if __name__ == '__main__':
     basepath = os.path.realpath(os.path.curdir)
 
-    INPUT_FILE      = basepath+"/dataset/keyphrase/ir-books/expert-conflict-free/expert-conflict-free-no-stemming.txt"
-    TEXT_DIR        = basepath+"/dataset/keyphrase/ir-books/ir_documents/"
-    OUTPUT_FILE     = basepath+"/dataset/keyphrase/ir-books/expert-conflict-free.json"
+    INPUT_FILE      = basepath+"/dataset/keyphrase/ir-books(old-keyconcept)/expert-conflict-free/expert-conflict-free-no-stemming.txt"
+    TEXT_DIR        = basepath+"/dataset/keyphrase/ir-books(old-keyconcept)/ir_documents/"
+    OUTPUT_FILE     = basepath+"/dataset/keyphrase/ir-books(old-keyconcept)/expert-conflict-free.json"
     # os.makedirs(OUTPUT_DIR)
 
     output_list = []

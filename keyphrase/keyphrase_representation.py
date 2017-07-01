@@ -134,7 +134,7 @@ if __name__ == '__main__':
     logger.info('*' * 50)
 
     train_set, validation_set, test_sets, idx2word, word2idx = deserialize_from_file(config['dataset'])
-    # test_set = load_additional_testing_data(config['path']+'/dataset/keyphrase/ir-books/expert-conflict-free.json', idx2word, word2idx)
+    # test_set = load_additional_testing_data(config['path']+'/dataset/keyphrase/ir-books(old-keyconcept)/expert-conflict-free.json', idx2word, word2idx)
 
     logger.info('Load data done.')
     # data is too large to dump into file, so load from raw dataset directly

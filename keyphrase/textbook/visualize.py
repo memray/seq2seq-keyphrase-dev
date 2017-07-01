@@ -78,10 +78,11 @@ def chapter_scatter(x):
 
 def plot_chapter_vectors():
     for doc, encoding in zip(docs, input_encodings):
-        # print('*' * 50)
-        # print(doc['name'] + '  -  ' + doc['title'])
+        print('*' * 50)
+        print(doc['name'] + '  -  ' + doc['title'])
 
-        doc['encoding'] = encoding[0][-1][:300]
+        doc['forward_encoding'] = encoding[0][-1][:300]
+        doc['backward_encoding'] = encoding[0][0][300:]
         doc['book_id']  = doc['name'][:doc['name'].index('_')]
 
         # print(doc['book_id'] + ':' + doc['name'] + '  -  ' + doc['title'])
@@ -90,7 +91,9 @@ def plot_chapter_vectors():
         if doc['book_id'] not in book_name_id:
             book_name_id[doc['book_id']] = len(book_name_id)
 
-    X = np.asarray([doc['encoding'] for doc in docs])
+    # serialize_to_file(docs, config['path'] + '/dataset/textbook_linking/docs.pkl')
+
+    X = np.asarray([doc['forward_encoding'] for doc in docs])
     model = TSNE(n_components=2, random_state=0)
     np.set_printoptions(suppress=True)
     digits_proj = model.fit_transform(X)
@@ -191,5 +194,5 @@ if __name__=='__main__':
 
     book_name_id = {}
 
-    plot_phrase_vectors()
-    # plot_chapter_vectors()
+    # plot_phrase_vectors()
+    plot_chapter_vectors()

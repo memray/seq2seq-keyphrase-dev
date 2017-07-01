@@ -881,7 +881,7 @@ class DecoderAtt(Decoder):
             prev_a: (nb_samples, maxlen_s)
             cov:    (nb_samples, maxlen_s)  *** coverage ***
             -----------------------------------------
-            cc:     (nb_samples, maxlen_s, cxt_dim)
+            cc:     (nb_samples, maxlen_s, context_dim)
             cm:     (nb_samples, maxlen_s)
             ca:     (nb_samples, maxlen_s, ebd_dim)
             """

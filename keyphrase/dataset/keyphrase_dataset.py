@@ -4,9 +4,10 @@ import sys
 import time
 
 import nltk
+import numpy
 import numpy as np
 
-import keyphrase.config
+import keyphrase.config as config
 from emolga.dataset.build_dataset import *
 import re
 from keyphrase_test_dataset import *
@@ -204,23 +205,106 @@ def load_data_and_dict(training_dataset, testing_dataset):
     print('Dict size:   %d' % len(idx2word))
     return train_set, test_set, idx2word, word2idx
 
+
+def export_data_for_maui():
+    '''
+    Export training data for Maui
+    '''
+    pairs   = []
+    with open(config['training_dataset'], 'r') as f:
+        training_records = json.load(f)
+        # load training dataset
+        print('Loading training dataset')
+        title_dict = dict([(r['title'].strip().lower(), r) for r in training_records])
+        print('#(Training Data)=%d' % len(title_dict))
+
+        # load testing dataset
+        print('Loading testing dataset')
+        testing_names = config['testing_datasets']  # only these three may have overlaps with training data
+        testing_records = {}
+
+        # rule out the ones appear in testing data: 'inspec', 'krapivin', 'nus', 'semeval'
+        print('Filtering testing dataset from training data')
+        for dataset_name in testing_names:
+            print(dataset_name)
+
+            testing_records[dataset_name] = testing_data_loader(dataset_name,
+                                                                kwargs=dict(basedir=config['path'])).get_docs()
+
+            for r in testing_records[dataset_name]:
+                title = r['title'].strip().lower()
+                if title in title_dict:
+                    title_dict.pop(title)
+
+        training_records, train_pairs, wordfreq = dataset_utils.load_pairs(title_dict.values(), do_filter=True)
+        print('#(Training Data after Filtering Noises)=%d' % len(training_records))
+        validation_ids = deserialize_from_file(config['validation_id'])
+        validation_ids = filter(lambda x:x<len(training_records), validation_ids)
+        training_records    = numpy.delete(training_records, validation_ids, axis=0)
+
+        testing_ids = deserialize_from_file(config['testing_id'])
+        testing_ids = filter(lambda x:x<len(training_records), testing_ids)
+        training_records    = numpy.delete(training_records, testing_ids, axis=0)
+
+        print('#(Training Data after Filtering Validation/Testing data)=%d' % len(training_records))
+
+        for id, record in enumerate(training_records):
+            if id % 10000 == 0:
+                print(id)
+            # output_dir = config['baseline_data_path'] + '/maui/ke20k/train(all)/'
+            # if not os.path.exists(output_dir):
+            #     os.makedirs(output_dir)
+            # with open(output_dir+ str(id) + '.txt', 'w') as rf:
+            #     rf.write(record['title']+' \n '+record['abstract'])
+            # with open(output_dir+ str(id) + '.key', 'w') as rf:
+            #     for k in record['keyword'].split(';'):
+            #         rf.write('%s\t1\n' % k)
+
+            if id < 50000:
+                output_dir = config['baseline_data_path'] + '/maui/ke20k/train(50k)/'
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                with open(output_dir+ str(id) + '.txt', 'w') as rf:
+                    rf.write(record['title']+' \n '+record['abstract'])
+                with open(output_dir+ str(id) + '.key', 'w') as rf:
+                    for k in record['keyword'].split(';'):
+                        rf.write('%s\t1\n' % k)
+            else:
+                break
+
+            # if id < 200000:
+            #     output_dir = config['baseline_data_path'] + '/maui/ke20k/train(200k)/'
+            #     if not os.path.exists(output_dir):
+            #         os.makedirs(output_dir)
+            #     with open(output_dir+ str(id) + '.txt', 'w') as rf:
+            #         rf.write(record['title']+' \n '+record['abstract'])
+            #     with open(output_dir+ str(id) + '.key', 'w') as rf:
+            #         for k in record['keyword'].split(';'):
+            #             rf.write('%s\t1\n' % k)
+
+
 if __name__ == '__main__':
     # config = config.setup_keyphrase_all()
     config = config.setup_keyphrase_all()
 
-    start_time = time.clock()
-    train_set, test_set, idx2word, word2idx = load_data_and_dict(config['training_dataset'], config['testing_dataset'])
-    serialize_to_file([train_set, test_set, idx2word, word2idx], config['dataset'])
-    print('Finish processing and dumping: %d seconds' % (time.clock()-start_time))
+    export_data_for_maui()
 
-    # export vocabulary to file for manual check
-    wordfreq = sorted(wordfreq.items(), key=lambda a: a[1], reverse=True)
-    serialize_to_file(wordfreq, config['voc'])
-    with open(config['path']+'/dataset/keyphrase/voc_list.json', 'w') as voc_file:
-        str = ''
-        for w,c in wordfreq:
-            str += '%s\t%d\n' % (w,c)
-        voc_file.write(str)
+    '''
+    examine the data
+    '''
+    # start_time = time.clock()
+    # train_set, test_set, idx2word, word2idx = load_data_and_dict(config['training_dataset'], config['testing_dataset'])
+    # serialize_to_file([train_set, test_set, idx2word, word2idx], config['dataset'])
+    # print('Finish processing and dumping: %d seconds' % (time.clock()-start_time))
+    #
+    # # export vocabulary to file for manual check
+    # wordfreq = sorted(wordfreq.items(), key=lambda a: a[1], reverse=True)
+    # serialize_to_file(wordfreq, config['voc'])
+    # with open(config['path']+'/dataset/keyphrase/voc_list.json', 'w') as voc_file:
+    #     str = ''
+    #     for w,c in wordfreq:
+    #         str += '%s\t%d\n' % (w,c)
+    #     voc_file.write(str)
 
 
     # train_set, test_set, idx2word, word2idx = deserialize_from_file(config['dataset'])

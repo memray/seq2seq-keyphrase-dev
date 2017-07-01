@@ -16,7 +16,6 @@ import xml.etree.ElementTree as ET
 
 import keyphrase.dataset.dataset_utils as utils
 from emolga.utils.generic_utils import get_from_module
-from keyphrase import keyphrase_utils
 
 from keyphrase.config import setup_keyphrase_all
 from emolga.dataset.build_dataset import deserialize_from_file, serialize_to_file

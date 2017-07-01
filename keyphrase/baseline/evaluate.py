@@ -333,8 +333,8 @@ def evaluate_baselines():
     :return:
     '''
     # base_dir = '/Users/memray/Project/Keyphrase_Extractor-UTD/'
-    # 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'KEA', 'RNN_present', 'CopyRNN_present_singleword=0'
-    models = ['CopyRNN_present_singleword=1', 'CopyRNN_present_singleword=2']
+    # 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'KEA', 'RNN_present', 'CopyRNN_present_singleword=0', 'CopyRNN_present_singleword=1', 'CopyRNN_present_singleword=2'
+    models = ['Maui']
 
     test_sets = config['testing_datasets']
 
