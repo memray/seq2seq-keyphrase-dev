@@ -1,5 +1,5 @@
 # seq2seq-keyphrase
-
+**Note: This is a development branch. Please check out this [[repo]](https://github.com/memray/seq2seq-keyphrase) for the release version of seq2seq-keyphrase.**
 
 Introduction
 ==========
