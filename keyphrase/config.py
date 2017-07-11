@@ -9,7 +9,9 @@ def setup_keyphrase_all():
     config = dict()
     # config['seed']            = 3030029828
     config['seed']            = 154316847
-    config['model_name']      = 'CopyRNN' # 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'Kea', 'RNN', 'CopyRNN', 'CopyRNN-weak'
+
+    # for naming the output/log, 'TfIdf', 'TextRank', 'SingleRank', 'ExpandRank', 'Maui', 'Kea', 'RNN', 'CopyRNN', 'CopyRNN-weak'
+    config['model_name']      = 'CopyRNN'
     config['task_name']       = 'keyphrase-all.one2one.copy'
     # config['task_name']       = 'keyphrase-all.one2one.nocopy'
     # config['task_name']       = 'copynet-keyphrase-all.one2one.copy'
@@ -30,10 +32,10 @@ def setup_keyphrase_all():
     config['casestudy_log']   = config['path_experiment'] + '/case-print.log'
 
     # do training?
-    config['do_train']        = False
+    config['do_train']        = True
     # do predicting?
-    config['do_predict']      = True
-    # config['do_predict']      = False
+    # config['do_predict']      = True
+    config['do_predict']      = False
     # do testing?
     # config['do_evaluate']     = True
     config['do_evaluate']     = False
@@ -44,10 +46,10 @@ def setup_keyphrase_all():
 
     # actually still not clean enough, further filtering is done when loading pairs: dataset_utils.load_pairs()
     config['training_dataset']= config['path'] + '/dataset/keyphrase/million-paper/all_title_abstract_keyword_clean.json'
-    config['testing_name']    = 'inspec_all'
-    config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
+    # config['testing_name']    = 'inspec_all'
+    # config['testing_dataset'] = config['path'] + '/dataset/keyphrase/inspec/inspec_all.json'
 
-    config['testing_datasets']= ['irbooks'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd', 'irbooks', 'quora'
+    config['testing_datasets']= ['inspec'] # 'inspec', 'nus', 'semeval', 'krapivin', 'ke20k', 'kdd', 'www', 'umd', 'irbooks', 'quora'
     config['preprocess_type'] = 1 # 0 is old type, 1 is new type(keep most punctuation)
 
     config['data_process_name'] = 'punctuation-20000validation-20000testing/'
